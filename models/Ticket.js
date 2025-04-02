@@ -27,7 +27,12 @@ module.exports = (sequelize, DataTypes) => {
         createdAt: {
             type: DataTypes.DATE,
             defaultValue: DataTypes.NOW
-        }
+        },
+        conversationId: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            unique: true
+          }
     }, {
         tableName: 'TeamTickets' 
     });

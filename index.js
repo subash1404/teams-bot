@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 const path = require('path');
-
 const dotenv = require('dotenv');
 // Import required bot configuration.
 const ENV_FILE = path.join(__dirname, '.env');
@@ -62,11 +61,24 @@ adapter.onTurnError = onTurnErrorHandler;
 
 // Create the main dialog.
 const myBot = new EchoBot();
+const { sendTeamsReply } = require('./controller');
 
 // Listen for incoming requests.
 server.post('/api/messages', async (req, res) => {
     // Route received a request to adapter for processing
     await adapter.process(req, res, (context) => myBot.run(context));
+});
+
+server.post('/api/sendReply', async (req, res) => {
+    const { teamId, channelId, parentMessageId, message } = req.body;
+
+    try {
+        await sendTeamsReply(teamId, channelId, parentMessageId, message);
+        res.send(200, { success: true, message: 'Reply sent successfully!' });
+    } catch (error) {
+        console.error('❌ Error sending reply:', error.message);
+        res.send(500, { error: 'Failed to send reply.', details: error.message });
+    }
 });
 
 // Listen for Upgrade requests for Streaming.
