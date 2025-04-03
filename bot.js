@@ -1,89 +1,11 @@
 
-const { ActivityHandler, ConsoleTranscriptLogger } = require('botbuilder');
+const { MessageFactory, CardFactory, TeamsActivityHandler } = require('botbuilder');
 const { Ticket } = require('./models');
 
-class EchoBot extends ActivityHandler {
+class EchoBot extends TeamsActivityHandler {
     constructor() {
         super();
-        const { MessageFactory, CardFactory } = require('botbuilder');
-        const TicketService = require('./services/TicketService');
-
-        // this.onInvokeActivity(async (context, next) => {
-        //     console.log("Received an invoke event:", context.activity);
-        
-        //     if (!context.activity || !context.activity.name) {
-        //         console.error("Error: Activity name is undefined.");
-        //         return;
-        //     }
-        
-        //     if (context.activity.name === 'task/fetch') {
-        //         console.log("Handling task/fetch request");
-        
-        //         await context.sendActivity({
-        //             type: "invokeResponse",
-        //             value: {
-        //                 status: 200,
-        //                 body: {
-        //                     task: {
-        //                         type: "continue",
-        //                         value: {
-        //                             title: "Create a New Ticket",
-        //                             width: "medium",
-        //                             height: "large",
-        //                             card: {
-        //                                 "type": "AdaptiveCard",
-        //                                 "version": "1.4",
-        //                                 "body": [
-        //                                     {
-        //                                         "type": "TextBlock",
-        //                                         "text": "Enter Ticket Details",
-        //                                         "weight": "Bolder",
-        //                                         "size": "Medium"
-        //                                     },
-        //                                     {
-        //                                         "type": "Input.Text",
-        //                                         "id": "subject",
-        //                                         "placeholder": "Enter subject"
-        //                                     },
-        //                                     {
-        //                                         "type": "Input.Text",
-        //                                         "id": "description",
-        //                                         "placeholder": "Enter description",
-        //                                         "isMultiline": true
-        //                                     },
-        //                                     {
-        //                                         "type": "Input.ChoiceSet",
-        //                                         "id": "category",
-        //                                         "label": "Category",
-        //                                         "choices": [
-        //                                             { "title": "Bug", "value": "bug" },
-        //                                             { "title": "Feature Request", "value": "feature" },
-        //                                             { "title": "General Query", "value": "query" }
-        //                                         ]
-        //                                     }
-        //                                 ],
-        //                                 "actions": [
-        //                                     {
-        //                                         "type": "Action.Submit",
-        //                                         "title": "Submit",
-        //                                         "data": { "action": "submit_ticket" }
-        //                                     },
-        //                                     {
-        //                                         "type": "Action.Submit",
-        //                                         "title": "Cancel",
-        //                                         "data": { "action": "cancel_ticket" }
-        //                                     }
-        //                                 ]
-        //                             }
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //         });
-        //     }
-        
-        //     await next();
-        // });        
+        const TicketService = require('./services/TicketService');        
         
         this.onMessage(async (context, next) => {
             console.log('id = ', context.activity.from.id)
@@ -331,7 +253,7 @@ class EchoBot extends ActivityHandler {
             }
         }
     }
-    async handleTeamsTaskModuleFetch(context, action) {
+    async handleTeamsTaskModuleFetch(context , action) {
         console.log("\nhandleTeamsMessagingExtensionSubmitAction called: " + JSON.stringify(action));
     
         let actionData = action.data.msteams ? action.data.msteams.value : action.data;
@@ -343,38 +265,61 @@ class EchoBot extends ActivityHandler {
     
             // Generate the Create Ticket form
             let ticketForm = {
-                type: "AdaptiveCard",
-                version: "1.4",
-                body: [
-                    { type: "TextBlock", text: "Create a new Ticket", weight: "bolder", size: "large" },
-                    { type: "Input.Text", id: "title", placeholder: "Enter ticket title", label: "Title" },
-                    { type: "Input.Text", id: "description", placeholder: "Describe the issue", label: "Description", isMultiline: true },
-                    { type: "Input.ChoiceSet", id: "priority", label: "Priority", choices: [
-                        { title: "Low", value: "low" },
-                        { title: "Medium", value: "medium" },
-                        { title: "High", value: "high" }
-                    ]}
-                ],
-                actions: [
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
                     {
-                        type: "Action.Submit",
-                        title: "Submit Ticket",
-                        data: { action: "submit_ticket", formId: formId }
+                        "type": "TextBlock",
+                        "text": "Create a new Ticket",
+                        "weight": "bolder",
+                        "size": "large"
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "title",
+                        "placeholder": "Enter ticket title",
+                        "label": "Title"
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "description",
+                        "placeholder": "Describe the issue",
+                        "label": "Description",
+                        "isMultiline": true
+                    },
+                    {
+                        "type": "Input.ChoiceSet",
+                        "id": "priority",
+                        "label": "Priority",
+                        "choices": [
+                            {
+                                "title": "Low",
+                                "value": "low"
+                            },
+                            {
+                                "title": "Medium",
+                                "value": "medium"
+                            },
+                            {
+                                "title": "High",
+                                "value": "high"
+                            }
+                        ]
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Submit",
+                        "title": "Submit Ticket",
+                        "data": {
+                            "action": "submit_ticket",
+                            "formId": "{formId}"
+                        }
                     }
                 ]
-            };
-    
-            return {
-                task: {
-                    type: "continue",
-                    value: {
-                        title: "Create a Ticket",
-                        width: "medium",
-                        height: "medium",
-                        card: ticketForm
-                    }
-                }
-            };
+            };            
+            const cardAttachment = CardFactory.adaptiveCard(ticketForm);
+            await context.sendActivity(MessageFactory.attachment(cardAttachment));
         }
     
         return { composeExtension: { type: "result", attachmentLayout: "list", attachments: [] } };
