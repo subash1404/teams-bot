@@ -1,329 +1,180 @@
-
-const { MessageFactory, CardFactory, TeamsActivityHandler } = require('botbuilder');
-const { Ticket } = require('./models');
+const { TeamsActivityHandler, MessageFactory, CardFactory } = require('botbuilder');
 
 class EchoBot extends TeamsActivityHandler {
     constructor() {
         super();
-        const TicketService = require('./services/TicketService');        
-        
+        this.baseUrl = process.env.BaseUrl;
+
+        // Message handler: Send the Adaptive Card when a message is received
         this.onMessage(async (context, next) => {
-            console.log('id = ', context.activity.from.id)
-            if (context.activity.conversation.conversationType === 'channel') {
-                if (context.activity.value && context.activity.value.action === 'submit_update') {
-                    const { status, technician, ticketId } = context.activity.value;
+            const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
+            await context.sendActivity(reply);
 
-                    const updateDetails = `✅ **Ticket #${ticketId} Updated Successfully**\n\n` +
-                        `📌 **Status:** ${status}\n` +
-                        `👨‍🔧 **Technician:** ${technician || 'Not Assigned'}`;
-
-                    await context.sendActivity(updateDetails);
-                }
-                else if (context.activity.value && context.activity.value.action === 'view_ticket') {
-
-                    const ticketDetails = await isReplyMessage(context.activity.conversation.id);
-
-                    const detailsMessage = `📄 **Ticket Details**\n\n` +
-                        `🆔 **ID:** ${ticketDetails.id}\n` +
-                        `📋 **Description:** ${ticketDetails.body}\n` +
-                        `📌 **Status:** ${"in progress"}\n` +
-                        `👨‍🔧 **Technician:** ${"subash" || 'Not Assigned'}\n` +
-                        `🕒 **Created At:** ${ticketDetails.createdAt}`;
-
-                    await context.sendActivity(detailsMessage);
-                }
-                else if (await isReplyMessage(context.activity.conversation.id) == null) {
-                    const ticketId = '12345';
-                    const description = context.activity.text || 'No description provided.';
-                    const messageId = context.activity.id;
-
-                    await TicketService.saveTicket({
-                        name: context.activity.from.name,
-                        messageId,
-                        body: description,
-                        conversationId: context.activity.conversation.id
-                    });
-
-                    const adaptiveCard = {
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "type": "AdaptiveCard",
-                        "version": "1.5",
-                        "body": [
-                            { "type": "TextBlock", "size": "Medium", "weight": "Bolder", "text": "🎫 Ticket Created Successfully!" },
-                            { "type": "TextBlock", "text": `**Description:** ${description}`, "wrap": true }
-                        ],
-                        "actions": [
-                            {
-                                "type": "Action.ShowCard",
-                                "title": "Update Ticket",
-                                "card": {
-                                    "type": "AdaptiveCard",
-                                    "body": [
-                                        {
-                                            "type": "Input.ChoiceSet",
-                                            "id": "status",
-                                            "label": "Status",
-                                            "isRequired": true,
-                                            "choices": [
-                                                { "title": "Open", "value": "open" },
-                                                { "title": "In Progress", "value": "in_progress" },
-                                                { "title": "Closed", "value": "closed" }
-                                            ]
-                                        },
-                                        {
-                                            "type": "Input.Text",
-                                            "id": "technician",
-                                            "label": "Assign Technician",
-                                            "placeholder": "Enter technician name"
-                                        }
-                                    ],
-                                    "actions": [
-                                        {
-                                            "type": "Action.Submit",
-                                            "title": "Submit",
-                                            "data": {
-                                                "action": "submit_update",
-                                                "ticketId": ticketId
-                                            }
-                                        }
-                                    ]
-                                }
-                            },
-                            {
-                                "type": "Action.Submit",
-                                "title": "View Ticket",
-                                "data": {
-                                    "action": "view_ticket",
-                                    "ticketId": ticketId
-                                }
-                            }
-                        ]
-                    };
-
-                    await context.sendActivity({
-                        attachments: [CardFactory.adaptiveCard(adaptiveCard)]
-                    });
-                }
-
-                await next();
-            }
-            else {                
-                if (context.activity.value && context.activity.value.action === "submit_ticket") {
-                    const formData = context.activity.value;
-
-                    // Extract form fields
-                    const subject = formData.subject;
-                    const description = formData.description;
-                    const category = formData.category;
-
-                    await TicketService.saveTicket({
-                        name: context.activity.from.name,
-                        messageId: context.activity.id,
-                        body: description,
-                        conversationId: context.activity.conversation.id
-                    });
-
-                    // Process the ticket (store in DB, notify agents, etc.)
-                    await context.sendActivity(`✅ Ticket created successfully!\n\n**Subject:** ${subject}\n**Category:** ${category}`);
-
-                    await context.sendActivity({
-                        type: "invokeResponse",
-                        value: {
-                            status: 200,
-                            body: {
-                                task: {
-                                    type: "message",
-                                    value: "✅ Ticket successfully submitted!",
-                                }
-                            }
-                        }
-                    });
-
-                } else if (context.activity.value && context.activity.value.action === "cancel_ticket") {
-                    await context.sendActivity("❌ Ticket creation cancelled.");
-
-                    await context.sendActivity({
-                        type: "invokeResponse",
-                        value: {
-                            status: 200,
-                            body: {
-                                task: {
-                                    type: "message",
-                                    value: "❌ Ticket creation cancelled.",
-                                }
-                            }
-                        }
-                    });
-                }
-                else {
-                    const adaptiveCard = {
-                        "type": "AdaptiveCard",
-                        "version": "1.4",
-                        "body": [
-                            {
-                                "type": "TextBlock",
-                                "text": "Welcome to the support bot!",
-                                "weight": "Bolder",
-                                "size": "Medium"
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "Click the button below to create a ticket."
-                            }
-                        ],
-                        "actions": [
-                        {
-                        "type": "Action.Submit",
-                        "title": "Create Ticket",
-                        "data": {
-                            "msteams": {
-                            "type": "invoke",
-                            "value": {
-                                "type": "task/fetch",
-                                "tmType": "createTicketCard",
-                                "formId": "12345"
-                            }
-                            }
-                        }
-                        }
-                    ]
-                    };
-                    const cardAttachment = CardFactory.adaptiveCard(adaptiveCard);
-                    await context.sendActivity(MessageFactory.attachment(cardAttachment));
-                }
-            }
-        });
-
-        this.onMembersAdded(async (context, next) => {
-            const membersAdded = context.activity.membersAdded;
-            const welcomeText = 'Hello and welcome! Click the button below to create a ticket.';
-
-            // Adaptive Card with "Create Ticket" Button
-            const adaptiveCard = {
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": [
-                    {
-                        "type": "TextBlock",
-                        "text": "Welcome to the support bot!",
-                        "weight": "Bolder",
-                        "size": "Medium"
-                    },
-                    {
-                        "type": "TextBlock",
-                        "text": "Click the button below to create a ticket."
-                    }
-                ],
-                "actions": [
-                    {
-                        "type": "Action.Submit",
-                        "title": "Create Ticket",
-                        "data": { "action": "open_task_module" }
-                    }
-                ]
-            };
-
-            for (let cnt = 0; cnt < membersAdded.length; ++cnt) {
-                if (membersAdded[cnt].id !== context.activity.recipient.id) {
-                    await context.sendActivity(MessageFactory.text(welcomeText, welcomeText));
-                    const cardAttachment = CardFactory.adaptiveCard(adaptiveCard);
-                    await context.sendActivity(MessageFactory.attachment(cardAttachment));
-                    }
-            }
             await next();
         });
+    }
 
-        
+    // Handle when user clicks a button on the Adaptive Card
+    handleTeamsTaskModuleFetch(context, taskModuleRequest) {
+        const cardTaskFetchValue = taskModuleRequest.data.data;
+        const taskInfo = {};
 
+        if (cardTaskFetchValue === 'adaptiveCard') {
+            taskInfo.card = this.createAdaptiveCardAttachment();
+            this.setTaskInfo(taskInfo, {
+                height: 'medium',
+                width: 'medium',
+                title: 'Fill the form'
+            });
+        }
 
-        async function isReplyMessage(id) {
-            const pattern = /messageid=([0-9]+)/;
-            const match = id.match(pattern);
-
-            if (match) {
-                const messageId = match[1];
-
-                const ticket = await Ticket.findOne({
-                    where: { messageId: messageId }
-                });
-                return ticket
-            } else {
-                console.log("Message ID not found in thread id.");
-                return null;
+        return {
+            task: {
+                type: 'continue',
+                value: taskInfo
             }
+        };
+    }
+
+    async handleTeamsTaskModuleSubmit(context, taskModuleRequest) {
+        const submittedData = taskModuleRequest.data;
+    
+        if (submittedData.action === 'submitTicket') {
+            // Call your backend API here to log the ticket
+            // Example: Use axios or fetch to send POST request
+            console.log('Ticket submitted:', submittedData);
+    
+            // Respond to user
+            await context.sendActivity(MessageFactory.text("Ticket created successfully"));       
+            return null;
+        }  else if (submittedData.action === 'cancelTicket') {
+            return null;
         }
     }
-    async handleTeamsTaskModuleFetch(context , action) {
-        console.log("\nhandleTeamsMessagingExtensionSubmitAction called: " + JSON.stringify(action));
     
-        let actionData = action.data.msteams ? action.data.msteams.value : action.data;
-    
-        if (actionData.tmType === "createTicketCard") {
-            console.log("\nTriggering Create Ticket Form...");
-    
-            let formId = actionData.formId || "defaultForm";
-    
-            // Generate the Create Ticket form
-            let ticketForm = {
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": [
-                    {
-                        "type": "TextBlock",
-                        "text": "Create a new Ticket",
-                        "weight": "bolder",
-                        "size": "large"
-                    },
-                    {
-                        "type": "Input.Text",
-                        "id": "title",
-                        "placeholder": "Enter ticket title",
-                        "label": "Title"
-                    },
-                    {
-                        "type": "Input.Text",
-                        "id": "description",
-                        "placeholder": "Describe the issue",
-                        "label": "Description",
-                        "isMultiline": true
-                    },
-                    {
-                        "type": "Input.ChoiceSet",
-                        "id": "priority",
-                        "label": "Priority",
-                        "choices": [
-                            {
-                                "title": "Low",
-                                "value": "low"
-                            },
-                            {
-                                "title": "Medium",
-                                "value": "medium"
-                            },
-                            {
-                                "title": "High",
-                                "value": "high"
-                            }
-                        ]
+
+    // Utility to set size and title of task module
+    setTaskInfo(taskInfo, uiSettings) {
+        taskInfo.height = uiSettings.height;
+        taskInfo.width = uiSettings.width;
+        taskInfo.title = uiSettings.title;
+    }
+
+    // Send an Adaptive Card with action buttons
+    getTaskModuleAdaptiveCardOptions() {
+        const adaptiveCard = {
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            version: '1.0',
+            type: 'AdaptiveCard',
+            body: [
+                {
+                    type: 'TextBlock',
+                    text: 'Click below to open the form',
+                    weight: 'bolder',
+                    size: 'medium'
+                }
+            ],
+            actions: [
+                {
+                    type: 'Action.Submit',
+                    title: 'Open Form',
+                    data: {
+                        msteams: { type: 'task/fetch' },
+                        data: 'adaptiveCard'
                     }
-                ],
-                "actions": [
-                    {
-                        "type": "Action.Submit",
-                        "title": "Submit Ticket",
-                        "data": {
-                            "action": "submit_ticket",
-                            "formId": "{formId}"
-                        }
+                }
+            ]
+        };
+
+        return CardFactory.adaptiveCard(adaptiveCard);
+    }
+
+    // The form that opens inside the Task Module
+    createAdaptiveCardAttachment() {
+        return CardFactory.adaptiveCard({
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            version: '1.4',
+            type: 'AdaptiveCard',
+            body: [
+                {
+                    type: 'TextBlock',
+                    text: 'Create a New Ticket',
+                    weight: 'Bolder',
+                    size: 'Medium',
+                    wrap: true
+                },
+                {
+                    type: 'TextBlock',
+                    text: 'Subject',
+                    wrap: true
+                },
+                {
+                    type: 'Input.Text',
+                    id: 'subject',
+                    placeholder: 'Enter ticket subject'
+                },
+                {
+                    type: 'TextBlock',
+                    text: 'Description',
+                    wrap: true
+                },
+                {
+                    type: 'Input.Text',
+                    id: 'description',
+                    placeholder: 'Enter ticket description',
+                    isMultiline: true
+                },
+                {
+                    type: 'TextBlock',
+                    text: 'Technician',
+                    wrap: true
+                },
+                {
+                    type: 'Input.ChoiceSet',
+                    id: 'technician',
+                    style: 'compact',
+                    choices: [
+                        { title: 'Technician A', value: 'tech_a' },
+                        { title: 'Technician B', value: 'tech_b' },
+                        { title: 'Technician C', value: 'tech_c' }
+                    ]
+                },
+                {
+                    type: 'TextBlock',
+                    text: 'Priority',
+                    wrap: true
+                },
+                {
+                    type: 'Input.ChoiceSet',
+                    id: 'priority',
+                    style: 'compact',
+                    choices: [
+                        { title: 'Low', value: 'low' },
+                        { title: 'Medium', value: 'medium' },
+                        { title: 'High', value: 'high' },
+                        { title: 'Critical', value: 'critical' }
+                    ]
+                }
+            ],
+            actions: [
+                {
+                    type: 'Action.Submit',
+                    title: 'Submit',
+                    data: {
+                        action: 'submitTicket'
                     }
-                ]
-            };            
-            const cardAttachment = CardFactory.adaptiveCard(ticketForm);
-            await context.sendActivity(MessageFactory.attachment(cardAttachment));
-        }
+                },
+                {
+                    type: 'Action.Submit',
+                    title: 'Cancel',
+                    data: {
+                        action: 'cancelTicket'
+                    }
+                }
+            ]
+        });
+    }
     
-        return { composeExtension: { type: "result", attachmentLayout: "list", attachments: [] } };
-    }    
 }
 
 module.exports.EchoBot = EchoBot;
