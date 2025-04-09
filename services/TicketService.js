@@ -1,4 +1,7 @@
 const { Ticket } = require('../models');
+const db = require('../models'); // or the correct path to index.js
+const Team = db.Team;
+
 
 class TicketService {
     async saveTicket(ticketData) {
@@ -17,6 +20,10 @@ class TicketService {
 
     async getTicketByMessageId(messageId) {
         return await Ticket.findOne({ where: { messageId } });
+    }
+    
+    async getTeamByDeptName(department){
+        return await Team.findOne({ where: { department }})
     }
 }
 

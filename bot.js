@@ -1,4 +1,7 @@
 const { TeamsActivityHandler, MessageFactory, CardFactory } = require('botbuilder');
+const TicketService = require('./services/TicketService');
+const { sendTeamsReply, sendTeamsChannelMessage } = require('./controller'); // adjust path as needed
+
 
 class EchoBot extends TeamsActivityHandler {
     constructor() {
@@ -8,6 +11,7 @@ class EchoBot extends TeamsActivityHandler {
         // Message handler: Send the Adaptive Card when a message is received
         this.onMessage(async (context, next) => {
             const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
+            console.log(context.activity.from.aadObjectId);
             await context.sendActivity(reply);
 
             await next();
@@ -43,10 +47,25 @@ class EchoBot extends TeamsActivityHandler {
             // Call your backend API here to log the ticket
             // Example: Use axios or fetch to send POST request
             console.log('Ticket submitted:', submittedData);
+
+            await TicketService.saveTicket({
+                name: context.activity.from.name,
+                messageId: context.activity.id,
+                body: submittedData.description,
+                dept: submittedData.department,
+                title: submittedData.title,
+                conversationId: context.activity.conversation.id
+            });
+
+            const team =  await TicketService.getTeamByDeptName(submittedData.department)
+            const ticket = await TicketService.getTicketByMessageId(context.activity.id)
     
+            await sendTeamsReply(null,ticket)
+            await sendTeamsChannelMessage(team.teamId, team.channelId,ticket)
             // Respond to user
             await context.sendActivity(MessageFactory.text("Ticket created successfully"));       
             return null;
+
         }  else if (submittedData.action === 'cancelTicket') {
             return null;
         }
@@ -105,13 +124,13 @@ class EchoBot extends TeamsActivityHandler {
                 },
                 {
                     type: 'TextBlock',
-                    text: 'Subject',
+                    text: 'Title',
                     wrap: true
                 },
                 {
                     type: 'Input.Text',
-                    id: 'subject',
-                    placeholder: 'Enter ticket subject'
+                    id: 'title',
+                    placeholder: 'Enter ticket title'
                 },
                 {
                     type: 'TextBlock',
@@ -126,17 +145,17 @@ class EchoBot extends TeamsActivityHandler {
                 },
                 {
                     type: 'TextBlock',
-                    text: 'Technician',
+                    text: 'Department',
                     wrap: true
                 },
                 {
                     type: 'Input.ChoiceSet',
-                    id: 'technician',
+                    id: 'department',
                     style: 'compact',
                     choices: [
-                        { title: 'Technician A', value: 'tech_a' },
-                        { title: 'Technician B', value: 'tech_b' },
-                        { title: 'Technician C', value: 'tech_c' }
+                        { title: 'HR', value: 'hr' },
+                        { title: 'Engineering', value: 'engineering' },
+                        { title: 'Sales', value: 'sales' }
                     ]
                 },
                 {
