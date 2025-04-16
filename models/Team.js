@@ -1,7 +1,6 @@
 'use strict';
 const { Model } = require('sequelize');
 
-// models/Team.js
 module.exports = (sequelize, DataTypes) => {
     const Team = sequelize.define('Team', {
       id: {
@@ -25,6 +24,5 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'Teams',
       timestamps: false 
     });
-  
     return Team;
   };  

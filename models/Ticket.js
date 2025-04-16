@@ -33,7 +33,6 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       unique: true
     },
-    // ✅ New Columns
     dept: {
       type: DataTypes.STRING,
       allowNull: true,

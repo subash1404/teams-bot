@@ -18,6 +18,28 @@ class TicketService {
         }
     }
 
+    async updateTicket(ticketId, updateData) {
+        try {
+            const ticket = await Ticket.findOne({ where: { id: ticketId } });
+
+            if (!ticket) {
+                throw new Error(`Ticket with ID ${ticketId} not found`);
+            }
+
+            ticket.title = updateData.title || ticket.title;
+            ticket.body = updateData.body || ticket.body;
+            ticket.dept = updateData.dept || ticket.dept;
+            ticket.messageId = updateData.messageId || ticket.messageId;
+            ticket.conversationId = updateData.conversationId || ticket.conversationId;
+
+            await ticket.save();
+            return ticket;
+        } catch (error) {
+            console.error('Error updating ticket:', error.message);
+            throw error;
+        }
+    }
+
     async getTicketByMessageId(messageId) {
         return await Ticket.findOne({ where: { messageId } });
     }
