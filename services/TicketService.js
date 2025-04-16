@@ -1,6 +1,7 @@
 const { Ticket } = require('../models');
 const db = require('../models'); // or the correct path to index.js
 const Team = db.Team;
+const User = db.User;
 
 
 class TicketService {
@@ -23,7 +24,13 @@ class TicketService {
     }
     
     async getTeamByDeptName(department){
-        return await Team.findOne({ where: { department }})
+        return await Team.findOne({ where: { department }});
+    }
+
+    async getAllUsers(){
+        return await User.findAll({
+            attributes: ['displayName', 'id']
+          });
     }
 }
 

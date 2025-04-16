@@ -3,6 +3,7 @@ const TicketService = require('./services/TicketService');
 const { sendTeamsReply, sendTeamsChannelMessage } = require('./controller'); // adjust path as needed
 const { TurnContext } = require('botbuilder');
 const { Ticket } = require('./models');
+const axios = require('axios');
 
 
 class EchoBot extends TeamsActivityHandler {
@@ -10,7 +11,6 @@ class EchoBot extends TeamsActivityHandler {
         super();
         this.baseUrl = process.env.BaseUrl;
 
-        // Message handler: Send the Adaptive Card when a message is received
         this.onMessage(async (context, next) => {
             if(context.activity.conversation.conversationType === 'channel'){
                 if (await isReplyMessage(context.activity.conversation.id)==null){
@@ -35,8 +35,7 @@ class EchoBot extends TeamsActivityHandler {
         });
     }
 
-    // Handle when user clicks a button on the Adaptive Card
-    handleTeamsTaskModuleFetch(context, taskModuleRequest) {
+    async handleTeamsTaskModuleFetch(context, taskModuleRequest) {
         console.log("Inside 1")
         const cardTaskFetchValue = taskModuleRequest.data.data;
         const taskInfo = {};
@@ -60,6 +59,15 @@ class EchoBot extends TeamsActivityHandler {
                 width: 'medium',
                 title: 'Reply to Ticket'
             });
+        } else if (cardTaskFetchValue === 'conversation'){
+            const cardJson = await createUserSelectionCard();
+            const adaptiveCard = CardFactory.adaptiveCard(cardJson);
+            taskInfo.card = adaptiveCard;
+            this.setTaskInfo(taskInfo, {
+                height: 'medium',
+                width: 'medium',
+                title: 'initiate chat'
+            });
         }
 
         return {
@@ -72,10 +80,9 @@ class EchoBot extends TeamsActivityHandler {
 
     async handleTeamsTaskModuleSubmit(context, taskModuleRequest) {
         const submittedData = taskModuleRequest.data;
+        console.log(taskModuleRequest.data.selectedUsers)
     
         if (submittedData.action === 'submitTicket') {
-            // Call your backend API here to log the ticket
-            // Example: Use axios or fetch to send POST request
             console.log('Ticket submitted:', submittedData);
 
             await TicketService.saveTicket({
@@ -93,81 +100,72 @@ class EchoBot extends TeamsActivityHandler {
             console.log("From User id: " + from)
             await sendTeamsReply(null,ticket, from)
             await sendTeamsChannelMessage(team.teamId, team.channelId,ticket)
-            // Respond to user
             await context.sendActivity(MessageFactory.text("Ticket created successfully"));       
             return null;
 
         }  else if (submittedData.action === 'cancelTicket') {
             return null;
-        } else if (submittedData.action === 'submitReply') {
-            console.log(JSON.stringify(submittedData));
-            const userReply = submittedData.userReply;
-            const ticketId = submittedData.ticketId;
-            const replyToId = context.activity.replyToId;
-            console.log("data: " + userReply + ticketId + replyToId);
-            await context.sendActivity(MessageFactory.text("Response sent successfully"))
-            
-            // try {
-            //   // Create a new card with the user's reply
-            //   const updatedCard = CardFactory.adaptiveCard({
-            //     type: 'AdaptiveCard',
-            //     version: '1.3',
-            //     body: [
-            //       {
-            //         type: 'TextBlock',
-            //         text: `Ticket ID: ${ticketId}`,
-            //         weight: 'bolder',
-            //         size: 'medium'
-            //       },
-            //       {
-            //         type: 'TextBlock',
-            //         text: 'Your reply has been submitted.',
-            //         wrap: true
-            //       },
-            //       {
-            //         type: 'TextBlock',
-            //         text: `Reply: ${userReply}`,
-            //         wrap: true,
-            //         spacing: 'Medium',
-            //         weight: 'bolder'
+        } else if (submittedData.action === 'createGroup') {
+            const userIds = submittedData.selectedUsers.split(',');
+            const members = userIds.map(id => ({
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${id}`
+            }));
+            const payload = {
+                chatType: "group",
+                members
+            };
+            const response = await axios.post(
+                "https://graph.microsoft.com/v1.0/chats",
+                payload,
+                {
+                headers: {
+                    Authorization: `Bearer ${process.env.AccessToken}`,
+                    'Content-Type': 'application/json'
+                }
+                }
+            );
+            const chatId = response.data.id;
+            console.log("ChatId: "+ chatId)
+
+            return {
+                task: {
+                  type: 'message',
+                  value: `✅ Group created! [Open Chat](https://teams.microsoft.com/l/chat/0/0?chatId=${chatId})`
+                }
+            };    
+            // return {
+            //     task: {
+            //       type: 'continue',
+            //       value: {
+            //         title: 'Group Created!',
+            //         height: 200,
+            //         width: 400,
+            //         card: {
+            //           type: 'AdaptiveCard',
+            //           version: '1.4',
+            //           body: [
+            //             {
+            //               type: 'TextBlock',
+            //               text: '✅ Group created successfully!',
+            //               weight: 'Bolder',
+            //               wrap: true
+            //             }
+            //           ],
+            //           actions: [
+            //             {
+            //               type: 'Action.OpenUrl',
+            //               title: 'Open Chat',
+            //               url: `https://teams.microsoft.com/l/chat/0/0?chatId=${chatId}`
+            //             }
+            //           ],
+            //           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json'
+            //         }
             //       }
-            //     ]
-            //   });
-              
-            //   // Update the existing message with the new card
-            //   await context.updateActivity({
-            //     type: 'message',
-            //     id: replyToId,
-            //     attachments: [updatedCard]
-            //   });
-              
-            //   console.log("Card updated successfully");
-              
-            //   // For Teams invoke activities, we need to send an invoke response
-            //   if (context.activity.name === 'task/submit') {
-            //     const invokeResponse = {
-            //       task: {
-            //         type: 'message',
-            //         value: 'Reply submitted successfully!'
-            //       }
-            //     };
-                
-            //     return invokeResponse;
-            //   }
-            // } catch (error) {
-            //   console.error("Error updating card:", error);
-              
-            //   // For Teams invoke activities, send error response
-            //   if (context.activity.name === 'task/submit') {
-            //     return {
-            //       task: {
-            //         type: 'message',
-            //         value: `Error: ${error.message}`
-            //       }
-            //     };
-            //   }
-            // }
-          }
+            //     }
+            //   };              
+        }
     }
 
     // Utility to set size and title of task module
@@ -213,7 +211,7 @@ class EchoBot extends TeamsActivityHandler {
                                   },
                                   action: "initiateConversation",
                                   ticketId: ticket.id,
-                                  data: 'adaptiveCard'
+                                  data: 'conversation'
                                 }
                             }
                         ]
@@ -366,7 +364,6 @@ class EchoBot extends TeamsActivityHandler {
             ]
         });
     }
-    
 }
 
 async function isReplyMessage(id) {
@@ -383,6 +380,58 @@ async function isReplyMessage(id) {
     } else {
         console.log("Message ID not found in thread id.");
         return null;
+    }
+}
+
+async function createUserSelectionCard() {
+    try {
+      const users = await TicketService.getAllUsers();
+  
+      const choices = users.map(user => ({
+        title: user.displayName,
+        value: user.id
+      }));
+  
+      const card = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.5",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Create a Group",
+            "weight": "Bolder",
+            "size": "Medium"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Select users to add to the group:",
+            "wrap": true
+          },
+          {
+            "type": "Input.ChoiceSet",
+            "id": "selectedUsers",
+            "isMultiSelect": true,
+            "style": "expanded",
+            "choices": choices
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.Submit",
+            "title": "Create Group",
+            "data": {
+              "action": "createGroup"
+            }
+          }
+        ]
+      };
+  
+      return card;
+  
+    } catch (err) {
+      console.error("Error fetching users:", err);
+      throw err;
     }
 }
 module.exports.EchoBot = EchoBot;
