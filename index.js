@@ -61,7 +61,7 @@ adapter.onTurnError = onTurnErrorHandler;
 
 // Create the main dialog.
 const myBot = new EchoBot();
-const { sendTeamsReply } = require('./controller');
+const { sendTeamsReply, sendTicketReply } = require('./controller');
 
 // Listen for incoming requests.
 server.post('/api/messages', async (req, res) => {
@@ -80,6 +80,18 @@ server.post('/api/sendReply', async (req, res) => {
         res.send(500, { error: 'Failed to send reply.', details: error.message });
     }
 });
+
+server.post('/webhook/reply', async (req, res) => {
+    try {
+        const { ticketId, replyMessage, repliedBy} = req.body;
+        await sendTicketReply(null, ticketId, replyMessage, repliedBy)
+        res.send(200, { success: true, message: 'Ticketreply sent successfully!' });
+    }
+    catch (error) {
+        console.error('❌ Error sending Ticketreply:', error.message);
+        res.send(500, { error: 'Failed to send Ticketreply.', details: error.message });
+    }
+  });  
 
 // Listen for Upgrade requests for Streaming.
 server.on('upgrade', async (req, socket, head) => {
