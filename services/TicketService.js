@@ -1,4 +1,6 @@
+const { where } = require('sequelize');
 const { Ticket } = require('../models');
+const { Channel } = require('../models')
 const db = require('../models'); // or the correct path to index.js
 const Team = db.Team;
 const User = db.User;
@@ -19,6 +21,25 @@ class TicketService {
         }
     }
 
+    async updateAgentConversationId(ticketId, newAgentConversationId) {
+        try {
+          const [updatedRows] = await Ticket.update(
+            { agentConversationId: newAgentConversationId },
+            { where: { id: ticketId } }
+          );
+                
+          if (updatedRows === 0) {
+            throw new Error(`No ticket found with ID: ${ticketId}`);
+          }
+      
+          console.log(`✅ agentConversationId updated for ticket ${ticketId}`);
+          return true;
+        } catch (error) {
+          console.error(`❌ Failed to update agentConversationId: ${error.message}`);
+          return false;
+        }
+      }
+
     async getTicketByMessageId(messageId) {
         return await Ticket.findOne({ where: { messageId } });
     }
@@ -31,6 +52,19 @@ class TicketService {
         return await User.findAll({
             attributes: ['displayName', 'id']
           });
+    }
+
+    async findByRequesterConversationId(requesterConversationId) {
+        return await Ticket.findOne( {where: { requesterConversationId }} )
+
+    }
+
+    async findByAgentConversationId(agentConversationId) {
+        return await Ticket.findOne( {where: { agentConversationId }} )
+    }
+
+    async findChannelById(channelId) {
+        return await Channel.findOne({ where: { id: channelId } });
     }
 }
 
