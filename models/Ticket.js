@@ -28,9 +28,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    conversationId: {
+    requesterConversationId: {
       type: DataTypes.STRING,
       allowNull: false,
+      unique: true
+    },
+    agentConversationId: {
+      type: DataTypes.STRING,
+      allowNull: true,
       unique: true
     },
     // ✅ New Columns

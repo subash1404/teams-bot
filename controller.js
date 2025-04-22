@@ -44,18 +44,16 @@ async function sendTeamsReply(parentMessageId, ticket, from) {
     }
 }
 
-async function sendTeamsChannelMessage(TeamId, channelId, ticket) {
+async function sendTeamsChannelMessage(channelId, ticket) {
     const appId = process.env.MicrosoftAppId;
     const appPassword = process.env.MicrosoftAppPassword;
     const tenantId = process.env.MicrosoftAppTenantId;
-
     const credentials = new MicrosoftAppCredentials(appId, appPassword);
     const connectorClient = new ConnectorClient(credentials, {
         baseUri: 'https://smba.trafficmanager.net/emea/'
     });
 
-    const activity = createTicketCard(ticket);
-
+    const activity = await createTicketCard(ticket);
     const conversationParams = {
         isGroup: true,
         channelData: {
@@ -69,53 +67,18 @@ async function sendTeamsChannelMessage(TeamId, channelId, ticket) {
         },
         tenantId : tenantId
     };
-
     try {
         const response = await connectorClient.conversations.createConversation(conversationParams);
         console.log(`Message sent to Teams channel. Conversation ID: ${response.id}`);
+        return response.id;
     } catch (error) {
         console.error('Error sending message to Teams channel:', error.response?.data || error.message);
     }
 }
 
-function createTicketCard(ticket, isDM = false) {
-    const body = [
-        {
-            type: "TextBlock",
-            text: "🎫 Ticket Created",
-            weight: "Bolder",
-            size: "Large",
-            color: "Accent"
-        },
-        {
-            type: "FactSet",
-            facts: [
-                { title: "Ticket ID:", value: ticket.id },
-                { title: "Subject:", value: ticket.title || "N/A"},
-                { title: "Message:", value: ticket.body || "N/A" },
-                { title: "From:", value: ticket.name || "N/A" }
-            ]
-        }
-    ];
-
-    // Conditionally add a button only in DM
-    if (isDM) {
-        body.push({
-            type: "ActionSet",
-            actions: [
-                {
-                    type: 'Action.Submit',
-                    title: 'Reply Ticket',
-                    data: {
-                        msteams: { type: 'task/fetch' },
-                        data: 'replyTicket',
-                        ticketId: ticket.id
-                    }
-                }
-            ]
-        });
-    }
-
+async function createTicketCard(ticket) {
+    console.log(ticket);
+    
     return {
         type: "message",
         attachments: [
@@ -125,13 +88,45 @@ function createTicketCard(ticket, isDM = false) {
                     type: "AdaptiveCard",
                     $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
                     version: "1.5",
-                    body
+                    body: [
+                        {
+                            type: "TextBlock",
+                            text: "🎫 Ticket Created",
+                            weight: "Bolder",
+                            size: "Large",
+                            color: "Accent"
+                        },
+                        {
+                            type: "FactSet",
+                            facts: [
+                                { title: "Ticket ID:", value: String(ticket.id) },
+                                { title: "Subject:", value: ticket.title || "N/A" },
+                                { title: "Message:", value: ticket.body || "N/A" },
+                                { title: "From:", value: ticket.name || "N/A" }
+                            ]
+                        }
+                    ],
+                    actions: [
+                        {
+                            type: "Action.Submit",
+                            title: "Initiate conversation",
+                            data: {
+                                msteams: {
+                                    type: "task/fetch"
+                                },
+                                action: "initiateConversation",
+                                ticketId: ticket.id,
+                                data: "conversation"
+                            }
+                        }
+                    ]
                 }
             }
         ]
     };
 }
-''
+
+
 async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedBy) {
     const appId = process.env.MicrosoftAppId;
     const appPassword = process.env.MicrosoftAppPassword;
