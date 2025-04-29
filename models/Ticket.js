@@ -48,6 +48,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
       defaultValue: null
+    },
+    technicianId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     tableName: 'TeamTickets'

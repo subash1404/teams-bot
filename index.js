@@ -3,6 +3,7 @@
 
 const path = require('path');
 const dotenv = require('dotenv');
+const TicketService = require('./services/TicketService');
 // Import required bot configuration.
 const ENV_FILE = path.join(__dirname, '.env');
 dotenv.config({ path: ENV_FILE });
@@ -70,11 +71,29 @@ server.post('/api/messages', async (req, res) => {
 });
 
 server.post('/api/sendReply', async (req, res) => {
-    const { teamId, channelId, parentMessageId, message } = req.body;
-
+    const { ticketId, message, userId } = req.body;
     try {
-        await sendTeamsReply(teamId, channelId, parentMessageId, message);
+        const ticket = await TicketService.findById(ticketId);
+        await sendTicketReply(ticket.requesterConversationId, ticketId, message, userId);
+        await sendTicketReply(ticket.agentConversationId, ticketId, message, userId);
         res.send(200, { success: true, message: 'Reply sent successfully!' });
+    } catch (error) {
+        console.error('❌ Error sending reply:', error.message);
+        res.send(500, { error: 'Failed to send reply.', details: error.message });
+    }
+});
+
+server.post('/api/updateTicket', async (req, res) => {
+    const { ticketId, subject, email } = req.body;
+    try {
+        console.log("Subject: ", subject);
+        const ticket = await TicketService.findById(ticketId);
+        ticket.body = subject || ticket.subject;
+        const technician = await TicketService.findTechnicianByemail(email);
+        ticket.technicianId = technician.id;
+        await ticket.save();
+        await technician.save()
+        res.send(200, { success: true, message: 'Ticket updated successfully!' });
     } catch (error) {
         console.error('❌ Error sending reply:', error.message);
         res.send(500, { error: 'Failed to send reply.', details: error.message });

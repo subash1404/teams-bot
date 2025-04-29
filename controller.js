@@ -44,7 +44,7 @@ async function sendTeamsReply(parentMessageId, ticket, from) {
     }
 }
 
-async function sendTeamsChannelMessage(channelId, ticket) {
+async function sendTeamsChannelMessage(channelId, ticket, userId) {
     const appId = process.env.MicrosoftAppId;
     const appPassword = process.env.MicrosoftAppPassword;
     const tenantId = process.env.MicrosoftAppTenantId;
@@ -70,6 +70,22 @@ async function sendTeamsChannelMessage(channelId, ticket) {
     try {
         const response = await connectorClient.conversations.createConversation(conversationParams);
         console.log(`Message sent to Teams channel. Conversation ID: ${response.id}`);
+        console.log("going to call ticket api");
+        const ticketResponse = await axios.post('https://3e01-14-195-129-62.ngrok-free.app/create-ticket', {
+            id: ticket.id,
+            client: "Subash",
+            subject: "Sample Subject",
+            description: ticket.body,
+            status: "Open",
+            technician: "Alice Smith",
+            provider: "TEAMS",
+            userId: userId
+        },{
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        console.log("Afer call")
         return response.id;
     } catch (error) {
         console.error('Error sending message to Teams channel:', error.response?.data || error.message);
@@ -117,6 +133,30 @@ async function createTicketCard(ticket) {
                                 action: "initiateConversation",
                                 ticketId: ticket.id,
                                 data: "conversation"
+                            }
+                        },
+                        {
+                            type: "Action.Submit",
+                            title: "✏️ Update Ticket",
+                            data: {
+                              msteams: {
+                                type: "task/fetch"
+                              },
+                              action: "updateTicket",
+                              ticketId: ticket.id,
+                              data: 'adaptiveCard'
+                            }
+                        },
+                        {
+                            type: "Action.Submit",
+                            title: "✏️ Assign Technician",
+                            data: {
+                              msteams: {
+                                type: "task/fetch"
+                              },
+                              action: "techAssign",
+                              ticketId: ticket.id,
+                              data: 'techAssign'
                             }
                         }
                     ]
@@ -183,7 +223,6 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
             console.error('Error sending message:', error.response?.data || error.message);
         }
     } else {
-        // Create a proper conversation parameters object
         const conversationParams = {
             isGroup: false,
             tenantId: process.env.MicrosoftAppTenantId,
