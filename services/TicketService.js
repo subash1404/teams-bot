@@ -105,6 +105,21 @@ class TicketService {
         }
     }
 
+    async findTeamsObjectIdByEmail(email) {
+        try {
+            const user = await User.findOne({ where: { email } });
+            if (!user) {
+                throw new Error(`User with email ${email} not found`);
+            }
+            console.log("User teamsObjectId: ", user.teamsObjectId);
+            return user.teamsObjectId;
+        }
+        catch (error) {
+            console.error('Error finding user:', error.message);
+            throw error;
+        }
+    }
+
     async assignTechnicianToTicket(id, technicianId) {
         const ticket = await Ticket.findOne({ where: { ticketId } });
         if (!ticket) throw new Error("Ticket not found");
