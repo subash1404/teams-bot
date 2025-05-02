@@ -2,30 +2,37 @@
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
-    const Channel = sequelize.define('Channel', {
-      id: {
-        type: DataTypes.STRING,
-        primaryKey: true,
-        allowNull: false
-      },
-      displayName: {
-        type: DataTypes.STRING,
-        allowNull: true
-      },
-      team_id: {
-        type: DataTypes.STRING,
-        allowNull: true
-      },
-      type: {
-        type: DataTypes.ENUM('AGENT', 'REQUESTER'),
-        allowNull: false
-      }
-    }, {
-      tableName: 'Channel',
-      timestamps: false
-    });
-  
-    return Channel;
-  };
-  
-  
+  const Channel = sequelize.define('Channel', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+      allowNull: false
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    teamId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    type: {
+      type: DataTypes.ENUM('PUBLIC', 'PRIVATE'),
+      allowNull: true
+    },
+    orgId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    channelId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    }
+  }, {
+    tableName: 'IMChannel',
+    timestamps: false
+  });
+
+  return Channel;
+};
