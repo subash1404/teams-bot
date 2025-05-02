@@ -5,7 +5,7 @@ const pool = mysql.createPool({
     host: 'localhost',
     user: 'root',      // Replace with your MySQL username
     password: 'root',  // Replace with your MySQL password
-    database: 'ticket'
+    database: 'courier'
 });
 
 async function connectDB() {

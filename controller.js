@@ -44,7 +44,7 @@ async function sendTeamsReply(parentMessageId, ticket, from) {
     }
 }
 
-async function sendTeamsChannelMessage(channelId, ticket, userId) {
+async function sendTeamsChannelMessage(channelId, ticketId, context) {
     const appId = process.env.MicrosoftAppId;
     const appPassword = process.env.MicrosoftAppPassword;
     const tenantId = process.env.MicrosoftAppTenantId;
@@ -53,7 +53,7 @@ async function sendTeamsChannelMessage(channelId, ticket, userId) {
         baseUri: 'https://smba.trafficmanager.net/emea/'
     });
 
-    const activity = await createTicketCard(ticket);
+    const activity = await createTicketCard(ticketId, context);
     const conversationParams = {
         isGroup: true,
         channelData: {
@@ -70,31 +70,15 @@ async function sendTeamsChannelMessage(channelId, ticket, userId) {
     try {
         const response = await connectorClient.conversations.createConversation(conversationParams);
         console.log(`Message sent to Teams channel. Conversation ID: ${response.id}`);
-        console.log("going to call ticket api");
-        const ticketResponse = await axios.post('https://3e01-14-195-129-62.ngrok-free.app/create-ticket', {
-            id: ticket.id,
-            client: "Subash",
-            subject: "Sample Subject",
-            description: ticket.body,
-            status: "Open",
-            technician: "Alice Smith",
-            provider: "TEAMS",
-            userId: userId
-        },{
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        console.log("Afer call")
         return response.id;
     } catch (error) {
         console.error('Error sending message to Teams channel:', error.response?.data || error.message);
     }
+    
 }
 
-async function createTicketCard(ticket) {
-    console.log(ticket);
-    
+async function createTicketCard(ticketId, context) {
+    console.log("Ticket ID inside createTicketCard: ", ticketId);
     return {
         type: "message",
         attachments: [
@@ -115,10 +99,10 @@ async function createTicketCard(ticket) {
                         {
                             type: "FactSet",
                             facts: [
-                                { title: "Ticket ID:", value: String(ticket.id) },
-                                { title: "Subject:", value: ticket.title || "N/A" },
-                                { title: "Message:", value: ticket.body || "N/A" },
-                                { title: "From:", value: ticket.name || "N/A" }
+                                { title: "Ticket ID:", value: String(ticketId) },
+                                { title: "Subject:", value: "Sample title" || "N/A" },
+                                { title: "Message:", value: context.activity.text || "N/A" },
+                                { title: "From:", value: context.activity.from.name || "N/A" }
                             ]
                         }
                     ],
@@ -131,7 +115,7 @@ async function createTicketCard(ticket) {
                                     type: "task/fetch"
                                 },
                                 action: "initiateConversation",
-                                ticketId: ticket.id,
+                                ticketId: ticketId,
                                 data: "conversation"
                             }
                         },
@@ -143,7 +127,7 @@ async function createTicketCard(ticket) {
                                 type: "task/fetch"
                               },
                               action: "updateTicket",
-                              ticketId: ticket.id,
+                              ticketId: ticketId,
                               data: 'adaptiveCard'
                             }
                         },
@@ -155,7 +139,7 @@ async function createTicketCard(ticket) {
                                 type: "task/fetch"
                               },
                               action: "techAssign",
-                              ticketId: ticket.id,
+                              ticketId: ticketId,
                               data: 'techAssign'
                             }
                         }
@@ -217,12 +201,14 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
 
     if (parentMessageId) {
         try {
+            console.log("Inside parentMessageId");
             const response = await connectorClient.conversations.sendToConversation(parentMessageId, activity);
             console.log(`Message sent successfully with conversation ID: ${response.id}`);
         } catch (error) {
             console.error('Error sending message:', error.response?.data || error.message);
         }
     } else {
+        console.log("Not Inside parentMessageId");
         const conversationParams = {
             isGroup: false,
             tenantId: process.env.MicrosoftAppTenantId,
@@ -254,4 +240,4 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
     }
 }
 
-module.exports = { sendTeamsReply , sendTeamsChannelMessage, sendTicketReply };
+module.exports = { sendTeamsReply , sendTeamsChannelMessage, sendTicketReply, createTicketCard };

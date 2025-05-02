@@ -71,14 +71,19 @@ server.post('/api/messages', async (req, res) => {
 });
 
 server.post('/api/sendReply', async (req, res) => {
-    const { ticketId, message, userId } = req.body;
+    const { ticketId, message, email } = req.body;
+    console.log("TicketId: ", ticketId);
+    console.log("Message: ", message);
+    console.log("Email: ", email);
     try {
-        const ticket = await TicketService.findById(ticketId);
-        await sendTicketReply(ticket.requesterConversationId, ticketId, message, userId);
-        await sendTicketReply(ticket.agentConversationId, ticketId, message, userId);
+        const ticket = await TicketService.findByTicketId(ticketId);
+        console.log("Ticket: "+ JSON.stringify(ticket));
+        await sendTicketReply(ticket.requestChannelConversationId, ticketId, message, email);
+        console.log("techChannelConversationId: ", ticket.techChannelConversationId);
+        await sendTicketReply(ticket.techChannelConversationId, ticketId, message, email);
         res.send(200, { success: true, message: 'Reply sent successfully!' });
     } catch (error) {
-        console.error('❌ Error sending reply:', error.message);
+        console.error(' Error sending reply:', error.message);
         res.send(500, { error: 'Failed to send reply.', details: error.message });
     }
 });

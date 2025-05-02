@@ -2,7 +2,7 @@
   "development": {
     "username": "root",
     "password": "root",
-    "database": "ticket",
+    "database": "courier",
     "host": "localhost",
     "dialect": "mysql"
   },
