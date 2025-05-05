@@ -80,75 +80,71 @@ async function sendTeamsChannelMessage(channelId, ticketId, context) {
 async function createTicketCard(ticketId, context) {
     console.log("Ticket ID inside createTicketCard: ", ticketId);
     return {
-        type: "message",
-        attachments: [
-            {
-                contentType: "application/vnd.microsoft.card.adaptive",
-                content: {
-                    type: "AdaptiveCard",
-                    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-                    version: "1.5",
-                    body: [
-                        {
-                            type: "TextBlock",
-                            text: "🎫 Ticket Created",
-                            weight: "Bolder",
-                            size: "Large",
-                            color: "Accent"
-                        },
-                        {
-                            type: "FactSet",
-                            facts: [
-                                { title: "Ticket ID:", value: String(ticketId) },
-                                { title: "Subject:", value: "Sample title" || "N/A" },
-                                { title: "Message:", value: context.activity.text || "N/A" },
-                                { title: "From:", value: context.activity.from.name || "N/A" }
-                            ]
-                        }
-                    ],
-                    actions: [
-                        {
-                            type: "Action.Submit",
-                            title: "Initiate conversation",
-                            data: {
-                                msteams: {
-                                    type: "task/fetch"
-                                },
-                                action: "initiateConversation",
-                                ticketId: ticketId,
-                                data: "conversation"
-                            }
-                        },
-                        {
-                            type: "Action.Submit",
-                            title: "✏️ Update Ticket",
-                            data: {
-                              msteams: {
-                                type: "task/fetch"
-                              },
-                              action: "updateTicket",
-                              ticketId: ticketId,
-                              data: 'adaptiveCard'
-                            }
-                        },
-                        {
-                            type: "Action.Submit",
-                            title: "✏️ Assign Technician",
-                            data: {
-                              msteams: {
-                                type: "task/fetch"
-                              },
-                              action: "techAssign",
-                              ticketId: ticketId,
-                              data: 'techAssign'
-                            }
-                        }
-                    ]
+      type: "message",
+      attachments: [
+        {
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: {
+            type: "AdaptiveCard",
+            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+            version: "1.5",
+            body: [
+              {
+                type: "TextBlock",
+                text: "🎫 Ticket Created",
+                weight: "Bolder",
+                size: "Large",
+                color: "Accent"
+              },
+              {
+                type: "FactSet",
+                facts: [
+                  { title: "Ticket ID:", value: String(ticketId) },
+                  { title: "Subject:", value: "Sample title" || "N/A" },
+                  { title: "Message:", value: context.activity.text || "N/A" },
+                  { title: "From:", value: context.activity.from.name || "N/A" }
+                ]
+              }
+            ],
+            actions: [
+                    {
+                      type: "Action.Execute",
+                      title: "Initiate conversation",
+                      verb: "createGroup",
+                      data: {
+                        ticketId: ticketId
+                      }
+                    },
+              {
+                type: "Action.Submit",
+                title: "✏️ Update Ticket",
+                data: {
+                  msteams: {
+                    type: "task/fetch"
+                  },
+                  action: "updateTicket",
+                  ticketId: ticketId,
+                  data: 'adaptiveCard'
                 }
-            }
-        ]
+              },
+              {
+                type: "Action.Submit",
+                title: "✏️ Assign Technician",
+                data: {
+                  msteams: {
+                    type: "task/fetch"
+                  },
+                  action: "techAssign",
+                  ticketId: ticketId,
+                  data: 'techAssign'
+                }
+              }
+            ]
+          }
+        }
+      ]
     };
-}
+  }
 
 
 async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedBy) {
