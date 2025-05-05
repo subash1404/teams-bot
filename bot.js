@@ -146,10 +146,23 @@ class EchoBot extends TeamsActivityHandler {
                 }
             }
             else {
-                const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
-                console.log(context.activity.from.aadObjectId);
-                await context.sendActivity(reply);
-                await next();
+                // const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
+                // console.log(context.activity.from.aadObjectId);
+                // await context.sendActivity(reply);
+                try {
+                    console.log("Before saving conversation for group chat");
+                    const ticket = await TicketService.findByPrivateChannelConversationId(context.activity.conversation.id);
+                    const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
+                    console.log("TicketId: " + ticket.ticketId)
+                    const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
+                        message: context.activity.text,
+                        email: email
+                    }, { headers: { 'Content-Type': 'application/json' } });
+                console.log("After saving conversation for group chat");
+            } catch (error) {  
+                console.error('Error saving message from group chat:', error.response?.data || error.message);
+            }
+            await next();
             }
         });
     }
@@ -313,7 +326,9 @@ class EchoBot extends TeamsActivityHandler {
                     );
                     
                     await context.sendActivity(`✅ Group created successfully! [Open Chat](https://teams.microsoft.com/l/chat/0/0?chatId=${chatId})`);
-                    
+                    await TicketService.updateTicket(ticketId, {
+                        privateChannelConversationId: chatId
+                    });
                     return { status: 200 };
                 } catch (error) {
                     console.error("Error creating group chat:", error);

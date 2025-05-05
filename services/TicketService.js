@@ -75,11 +75,9 @@ class TicketService {
                 throw new Error(`Ticket with ID ${ticketId} not found`);
             }
 
-            ticket.title = updateData.title || ticket.title;
-            ticket.body = updateData.body || ticket.body;
-            ticket.dept = updateData.dept || ticket.dept;
-            ticket.messageId = updateData.messageId || ticket.messageId;
-            ticket.conversationId = updateData.conversationId || ticket.conversationId;
+            ticket.requestChannelConversationId = updateData.requestChannelConversationId || ticket.requestChannelConversationId;
+            ticket.techChannelConversationId = updateData.techChannelConversationId || ticket.techChannelConversationId;
+            ticket.privateChannelConversationId = updateData.privateChannelConversationId || ticket.privateChannelConversationId;
 
             await ticket.save();
             return ticket;
@@ -120,6 +118,7 @@ class TicketService {
         }
     }
 
+
     async assignTechnicianToTicket(id, technicianId) {
         const ticket = await Ticket.findOne({ where: { ticketId } });
         if (!ticket) throw new Error("Ticket not found");
@@ -148,6 +147,10 @@ class TicketService {
 
     async findByAgentChannelConversationId(techChannelConversationId) {
         return await Ticket.findOne( {where: { techChannelConversationId }} )
+    }
+
+    async findByPrivateChannelConversationId(privateChannelConversationId) {
+        return await Ticket.findOne( {where: { privateChannelConversationId }} )
     }
 
     async findChannelById(channelId) {
