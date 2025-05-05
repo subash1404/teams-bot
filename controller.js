@@ -53,7 +53,7 @@ async function sendTeamsChannelMessage(channelId, ticketId, context) {
         baseUri: 'https://smba.trafficmanager.net/emea/'
     });
 
-    const activity = await createTicketCard(ticketId, context);
+    const activity = await technicianCreateTicketCard(ticketId, context);
     const conversationParams = {
         isGroup: true,
         channelData: {
@@ -77,7 +77,56 @@ async function sendTeamsChannelMessage(channelId, ticketId, context) {
     
 }
 
-async function createTicketCard(ticketId, context) {
+async function requesterCreateTicketCard(ticketId, context) {
+    console.log("Ticket ID inside createTicketCard: ", ticketId);
+    return {
+        type: "message",
+        attachments: [
+            {
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: {
+                    type: "AdaptiveCard",
+                    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+                    version: "1.5",
+                    body: [
+                        {
+                            type: "TextBlock",
+                            text: "🎫 Ticket Created",
+                            weight: "Bolder",
+                            size: "Large",
+                            color: "Accent"
+                        },
+                        {
+                            type: "FactSet",
+                            facts: [
+                                { title: "Ticket ID:", value: String(ticketId) },
+                                { title: "Subject:", value: "Sample title" || "N/A" },
+                                { title: "Message:", value: context.activity.text || "N/A" },
+                                { title: "From:", value: context.activity.from.name || "N/A" }
+                            ]
+                        }
+                    ],
+                    actions: [
+                        {
+                            type: "Action.Submit",
+                            title: "✏️ Update Ticket",
+                            data: {
+                              msteams: {
+                                type: "task/fetch"
+                              },
+                              action: "updateTicket",
+                              ticketId: ticketId,
+                              data: 'updateTicket'
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    };
+}
+
+async function technicianCreateTicketCard(ticketId, context) {
     console.log("Ticket ID inside createTicketCard: ", ticketId);
     return {
       type: "message",
@@ -145,7 +194,6 @@ async function createTicketCard(ticketId, context) {
       ]
     };
   }
-
 
 async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedBy) {
     const appId = process.env.MicrosoftAppId;
@@ -236,4 +284,4 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
     }
 }
 
-module.exports = { sendTeamsReply , sendTeamsChannelMessage, sendTicketReply, createTicketCard };
+module.exports = { sendTeamsReply , sendTeamsChannelMessage, sendTicketReply, requesterCreateTicketCard };

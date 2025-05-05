@@ -69,8 +69,8 @@ class TicketService {
       // TODO: have a look at fields
       async updateTicket(ticketId, updateData) {
         try {
-            const ticket = await Ticket.findOne({ where: { id: ticketId } });
-
+            const ticket = await Ticket.findOne({ where: { ticketId } });
+            
             if (!ticket) {
                 throw new Error(`Ticket with ID ${ticketId} not found`);
             }
@@ -93,8 +93,6 @@ class TicketService {
             if (!user) {
                 throw new Error(`User with teamsObjectId ${teamsObjectId} not found`);
             }
-            console.log("User found: ", user);
-            console.log("User email: ", user.email);
             return user.email;
         }
         catch (error) {

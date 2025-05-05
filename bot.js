@@ -1,7 +1,7 @@
 const { TeamsActivityHandler, MessageFactory, CardFactory } = require('botbuilder');
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
 const TicketService = require('./services/TicketService');
-const { sendTeamsReply, sendTeamsChannelMessage, createTicketCard } = require('./controller'); // adjust path as needed
+const { sendTeamsReply, sendTeamsChannelMessage, requesterCreateTicketCard} = require('./controller'); // adjust path as needed
 const { TurnContext } = require('botbuilder');
 const { Ticket } = require('./models');
 const { TeamsInfo } = require('botbuilder');
@@ -63,10 +63,10 @@ class EchoBot extends TeamsActivityHandler {
                         console.log("Afer call");
                         const ticketId = ticketResponse.data;
                         console.log("TicketId inside onMessage: " + JSON.stringify(ticketResponse.data));
-                        await context.sendActivity(await createTicketCard(ticketId, context));
+                        await context.sendActivity(await requesterCreateTicketCard(ticketId, context));
 
                         // TODO: fetch agentchannelId from mappings
-                        const agentChannelId = '19:REo9NLSxP6Nc3qUn2n8aMivpSuI3y9vrTaEXnGhqldM1@thread.tacv2';
+                        const agentChannelId = '19:7SZRT2YdlqNHD3U5QoZPZxrESx8socV-7SQZH9YI4_41@thread.tacv2';
                         console.log("agentChannelId: " + agentChannelId);
                         const techChannelConversationId = await sendTeamsChannelMessage(agentChannelId, ticketId, context);
                         console.log("techChannelConversationId: " + techChannelConversationId);
@@ -527,12 +527,27 @@ class EchoBot extends TeamsActivityHandler {
             });
         } else if (cardTaskFetchValue === 'updateTicket') {
             const ticketId = taskModuleRequest.data.ticketId;
-            const ticket = await TicketService.getTicketByTicketId(ticketId)
-            taskInfo.card = this.createUpdateTicketCard(ticket);
+        
+            // Fetch editable fields from your Helpdesk backend
+            const response = await fetch(`${process.env.BackEndBaseUrl}/ticket/${ticketId}/fields`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        
+            if (!response.ok) {
+                throw new Error(`Failed to fetch editable fields for ticket ${ticketId}`);
+            }
+        
+            const editableFields = await response.json();
+        
+            taskInfo.card = this.createUpdateTicketCard(editableFields , ticketId);
+        
             this.setTaskInfo(taskInfo, {
                 height: 'medium',
                 width: 'medium',
-                title: 'Fill the form'
+                title: 'Update Ticket'
             });
         }
         return {
@@ -566,30 +581,43 @@ class EchoBot extends TeamsActivityHandler {
         //     await sendTeamsReply(null, ticket, from)
         //     await sendTeamsChannelMessage(team.channelId, ticket)
         //     await context.sendActivity(MessageFactory.text("Ticket created successfully"));
-        //     return null;
+        //     return null;return null;
 
         // } else
         if (submittedData.action === 'submitUpdatedTicket') {
             console.log('Updating ticket:', submittedData);
-
-            await TicketService.updateTicket(submittedData.ticketId, {
-                title: submittedData.title,
-                messageId: context.activity.id,
-                body: submittedData.description,
-                dept: submittedData.department,
-                conversationId: context.activity.conversation.id
+        
+            const updatePayload = {
+                ticketId: submittedData.ticketId,
+                priority: submittedData.priority,
+                status: submittedData.status,
+                category: submittedData.category,
+            };
+        
+            const response = await fetch(`${process.env.BackEndBaseUrl}/update-ticket`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updatePayload)
             });
-
-            const updatedTicket = await TicketService.getTicketByTicketId(submittedData.ticketId);
-
+        
+            if (!response.ok) {
+                throw new Error(`Failed to update ticket #${submittedData.ticketId}`);
+            }
+        
+            const updatedTicketId = await response.text();
+        
+            // const updatedTicket = await TicketService.getTicketByTicketId(updatedTicketId);
+        
             await context.sendActivity({
                 type: "message",
-                text: `✅ Ticket #${submittedData.ticketId} updated successfully!`
+                text: `✅ Ticket #${updatedTicketId} updated successfully!`
             });
-
-            await context.sendActivity(await createTicketCard(updatedTicket));
-            return null;
-        } else if (submittedData.action === 'assignTechnician') {
+        
+            // await context.sendActivity(await createTicketCard(updatedTicket));
+        }
+         else if (submittedData.action === 'assignTechnician') {
             const { ticketId, selectedTechnician } = submittedData;
             console.log("submittedData" + JSON.stringify(submittedData));
             await axios.post(`${process.env.BackEndBaseUrl}/update-ticket`, {
@@ -816,67 +844,57 @@ class EchoBot extends TeamsActivityHandler {
         });
     }
 
-    createUpdateTicketCard(ticket) {
+    createUpdateTicketCard(fields , ticketId) {
+        const cardBody = [
+            {
+                type: 'TextBlock',
+                text: 'Update Ticket',
+                weight: 'Bolder',
+                size: 'Medium',
+                wrap: true
+            }
+        ];
+    
+        for (const field of fields) {
+            cardBody.push({
+                type: 'TextBlock',
+                text: field.name.charAt(0).toUpperCase() + field.name.slice(1),
+                wrap: true
+            });
+    
+            if (field.type === 'text') {
+                cardBody.push({
+                    type: 'Input.Text',
+                    id: field.name,
+                    value: field.value || '',
+                    placeholder: `Enter ${field.name}`
+                });
+            } else if (field.type === 'dropdown') {
+                cardBody.push({
+                    type: 'Input.ChoiceSet',
+                    id: field.name,
+                    style: 'compact',
+                    value: field.value,
+                    choices: field.options.map(opt => ({
+                        title: opt.charAt(0).toUpperCase() + opt.slice(1),
+                        value: opt
+                    }))
+                });
+            }
+        }
+    
         return CardFactory.adaptiveCard({
             $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
             version: '1.4',
             type: 'AdaptiveCard',
-            body: [
-                {
-                    type: 'TextBlock',
-                    text: `Updated Ticket #${ticket.id}`,
-                    weight: 'Bolder',
-                    size: 'Medium',
-                    wrap: true
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Title',
-                    wrap: true
-                },
-                {
-                    type: 'Input.Text',
-                    id: 'title',
-                    placeholder: 'Enter ticket title',
-                    value: ticket.title
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Description',
-                    wrap: true
-                },
-                {
-                    type: 'Input.Text',
-                    id: 'description',
-                    placeholder: 'Enter ticket description',
-                    isMultiline: true,
-                    value: ticket.body
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Priority',
-                    wrap: true
-                },
-                {
-                    type: 'Input.ChoiceSet',
-                    id: 'priority',
-                    style: 'compact',
-                    value: ticket.priority || 'medium', // fallback
-                    choices: [
-                        { title: 'Low', value: 'low' },
-                        { title: 'Medium', value: 'medium' },
-                        { title: 'High', value: 'high' },
-                        { title: 'Critical', value: 'critical' }
-                    ]
-                }
-            ],
+            body: cardBody,
             actions: [
                 {
                     type: 'Action.Submit',
                     title: 'Update',
                     data: {
                         action: 'submitUpdatedTicket',
-                        ticketId: ticket.id
+                        ticketId: ticketId
                     }
                 },
                 {
@@ -889,6 +907,7 @@ class EchoBot extends TeamsActivityHandler {
             ]
         });
     }
+    
 
     createReplyCardAttachment(ticketId) {
         return CardFactory.adaptiveCard({
