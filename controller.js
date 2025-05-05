@@ -187,6 +187,18 @@ async function technicianCreateTicketCard(ticketId, context) {
                   ticketId: ticketId,
                   data: 'techAssign'
                 }
+              },
+              {
+                type: "Action.Submit",
+                title: "✏️ Add Note",
+                data: {
+                  msteams: {
+                    type: "task/fetch"
+                  },
+                  action: "addNote",
+                  ticketId: ticketId,
+                  data: 'addNote'
+                }
               }
             ]
           }

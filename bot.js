@@ -6,6 +6,7 @@ const { TurnContext } = require('botbuilder');
 const { Ticket } = require('./models');
 const { TeamsInfo } = require('botbuilder');
 const axios = require('axios');
+const querystring = require('querystring');
 const { Op } = require('sequelize');
 
 
@@ -146,18 +147,21 @@ class EchoBot extends TeamsActivityHandler {
                 }
             }
             else {
-                // const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
+                const reply = MessageFactory.attachment(this.getTaskModuleAdaptiveCardOptions());
                 // console.log(context.activity.from.aadObjectId);
                 // await context.sendActivity(reply);
                 try {
-                    console.log("Before saving conversation for group chat");
-                    const ticket = await TicketService.findByPrivateChannelConversationId(context.activity.conversation.id);
-                    const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
-                    console.log("TicketId: " + ticket.ticketId)
-                    const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
-                        message: context.activity.text,
-                        email: email
-                    }, { headers: { 'Content-Type': 'application/json' } });
+                    // console.log("Before saving conversation for group chat");
+                    // const ticket = await TicketService.findByPrivateChannelConversationId(context.activity.conversation.id);
+                    // const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
+                    // console.log("TicketId: " + ticket.ticketId)
+                    // const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
+                    //     message: context.activity.text,
+                    //     email: email
+                    // }, { headers: { 'Content-Type': 'application/json' } });
+                    const card = await this.getDependantSearchCard();
+                    await context.sendActivity(MessageFactory.attachment(CardFactory.adaptiveCard(card)));
+
                 console.log("After saving conversation for group chat");
             } catch (error) {  
                 console.error('Error saving message from group chat:', error.response?.data || error.message);
@@ -260,6 +264,63 @@ class EchoBot extends TeamsActivityHandler {
 
       async onInvokeActivity(context) {
         console.log(`Invoke activity received: ${context.activity.name}`);
+
+        if (context.activity.name === 'task/fetch' && context.activity.value?.dataset === 'subcategories') {
+            const { queryText, data } = invokeActivity.value;
+            const category = data.category;
+        
+            if (!category) {
+                return {
+                    status: 200,
+                    type: 'application/vnd.microsoft.search.searchResponse',
+                    value: { results: [] }
+                };
+            }
+        
+            const response = await fetch(`${process.env.BackEndBaseUrl}/ticket/subcategories?category=${category.toLowerCase()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        
+            const allOptions = await response.json();
+        
+            const filteredOptions = allOptions.filter(sub =>
+                sub.title.toLowerCase().includes(queryText.toLowerCase())
+            );
+        
+            return {
+                status: 200,
+                type: 'application/vnd.microsoft.search.searchResponse',
+                value: {
+                    results: filteredOptions
+                }
+            };
+        }        
+
+        if (context._activity.name === 'application/search') {
+            const dropdownCard = context._activity.value.data.choiceselect;
+            const searchQuery = context._activity.value.queryText;
+      
+            const response = await axios.get(`http://registry.npmjs.com/-/v1/search?${querystring.stringify({ text: searchQuery, size: 8 })}`);
+            const npmPackages = response.data.objects.map(obj => ({
+              title: obj.package.name,
+              value: `${obj.package.name} - ${obj.package.description}`
+            }));
+      
+            if (response.status === 200) {
+              if (dropdownCard) {
+                return this.getCountrySpecificResults(dropdownCard.toLowerCase());
+              } else {
+                return this.getSuccessResult(npmPackages);
+              }
+            } else if (response.status === 204) {
+              return this.getNoResultFound();
+            } else if (response.status === 500) {
+              return this.getErrorResult();
+            }
+          }
         
         if (context.activity.name === 'adaptiveCard/action') {
             console.log('Adaptive card action data:', JSON.stringify(context.activity.value, null, 2));
@@ -338,6 +399,36 @@ class EchoBot extends TeamsActivityHandler {
             }
         }    
         return await super.onInvokeActivity(context);
+    }
+
+    async getCountrySpecificResults(country) {
+        const results = {
+          usa: [
+            { title: "CA", value: "CA" },
+            { title: "FL", value: "FL" },
+            { title: "TX", value: "TX" }
+          ],
+          france: [
+            { title: "Paris", value: "Paris" },
+            { title: "Lyon", value: "Lyon" },
+            { title: "Nice", value: "Nice" }
+          ],
+          india: [
+            { title: "Delhi", value: "Delhi" },
+            { title: "Mumbai", value: "Mumbai" },
+            { title: "Pune", value: "Pune" }
+          ]
+        };
+    
+        return {
+          status: 200,
+          body: {
+            "type": "application/vnd.microsoft.search.searchResponse",
+            "value": {
+              "results": results[country] || results.india
+            }
+          }
+        };
     }
     
 
@@ -438,6 +529,59 @@ class EchoBot extends TeamsActivityHandler {
         }
     }
 
+    async getDependantSearchCard() {
+        return {
+          "type": "AdaptiveCard",
+          "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
+          "version": "1.5",
+          "body": [
+            {
+              "size": "ExtraLarge",
+              "text": "Country Picker",
+              "weight": "Bolder",
+              "wrap": true,
+              "type": "TextBlock"
+            },
+            {
+              "id": "choiceselect",
+              "type": "Input.ChoiceSet",
+              "label": "Select a country or region:",
+              "choices": [
+                { "title": "USA", "value": "usa" },
+                { "title": "France", "value": "france" },
+                { "title": "India", "value": "india" }
+              ],
+              "valueChangedAction": {
+                "type": "Action.ResetInputs",
+                "targetInputIds": ["city"]
+              },
+              "isRequired": true,
+              "errorMessage": "Please select a country or region"
+            },
+            {
+              "style": "filtered",
+              "choices.data": {
+                "type": "Data.Query",
+                "dataset": "cities",
+                "associatedInputs": "auto"
+              },
+              "id": "city",
+              "type": "Input.ChoiceSet",
+              "label": "Select a city:",
+              "placeholder": "Type to search for a city in the selected country",
+              "isRequired": true,
+              "errorMessage": "Please select a city"
+            }
+          ],
+          "actions": [
+            {
+              "title": "Submit",
+              "type": "Action.Submit"
+            }
+          ]
+        };
+    }
+
     async isRequesterChannel(channelId) {
         const channel = await TicketService.findChannelById(channelId)
         console.log("Channel: " + JSON.stringify(channel));
@@ -505,6 +649,22 @@ class EchoBot extends TeamsActivityHandler {
                 width: 'medium',
                 title: 'Reply to Ticket'
             });
+        }
+        else if (cardTaskFetchValue === 'addNote') {
+            const ticketId = taskModuleRequest.data.ticketId;
+    
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Add Note to Ticket',
+                        height: 'medium',
+                        width: 'medium',
+                        card: this.getAddNoteAdaptiveCard(ticketId)
+                    }
+                }
+            };
+        }
         // else if (cardTaskFetchValue === 'conversation') {
         //     const cardJson = await createUserSelectionCard();
         //     const adaptiveCard = CardFactory.adaptiveCard(cardJson);
@@ -515,7 +675,7 @@ class EchoBot extends TeamsActivityHandler {
         //         title: 'initiate chat'
         //     });
         // } 
-        } else if (cardTaskFetchValue === 'techAssign') {
+        else if (cardTaskFetchValue === 'techAssign') {
             console.log('data: ' + JSON.stringify(taskModuleRequest.data));
             const cardJson = await createTechnicianAssignmentCard(taskModuleRequest.data.ticketId);
             const adaptiveCard = CardFactory.adaptiveCard(cardJson);
@@ -584,7 +744,31 @@ class EchoBot extends TeamsActivityHandler {
         //     return null;return null;
 
         // } else
-        if (submittedData.action === 'submitUpdatedTicket') {
+        if (submittedData.action === 'submitNote') {
+            const ticketId = submittedData.ticketId;
+            const noteText = submittedData.noteText;
+    
+            console.log(`Note submitted for Ticket ID ${ticketId}: ${noteText}`);
+    
+            // ✅ Send note to your PSA backend (example using fetch)
+            try {
+                await fetch(`${process.env.BackEndBaseUrl}/ticket/${ticketId}/notes`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: noteText })
+                });
+    
+                await context.sendActivity(`📝 Note added to Ticket #${ticketId} successfully!`);
+            } catch (error) {
+                console.error(error);
+                await context.sendActivity(`❌ Failed to add note to Ticket #${ticketId}`);
+            }
+    
+            return { task: { type: 'message', value: 'Note submitted successfully.' } };
+        }
+        else if (submittedData.action === 'submitUpdatedTicket') {
             console.log('Updating ticket:', submittedData);
         
             const updatePayload = {
@@ -758,6 +942,37 @@ class EchoBot extends TeamsActivityHandler {
         return CardFactory.adaptiveCard(adaptiveCard);
     }
 
+    getAddNoteAdaptiveCard(ticketId) {
+        return CardFactory.adaptiveCard({
+            type: 'AdaptiveCard',
+            body: [
+                {
+                    type: 'TextBlock',
+                    text: `Add Note to Ticket #${ticketId}`,
+                    weight: 'Bolder',
+                    size: 'Medium'
+                },
+                {
+                    type: 'Input.Text',
+                    id: 'noteText',
+                    placeholder: 'Type your note here...',
+                    isMultiline: true
+                }
+            ],
+            actions: [
+                {
+                    type: 'Action.Submit',
+                    title: 'Submit Note',
+                    data: {
+                        action: 'submitNote',
+                        ticketId: ticketId
+                    }
+                }
+            ],
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            version: '1.4'
+        });
+    }
     // The form that opens inside the Task Module
     createAdaptiveCardAttachment() {
         return CardFactory.adaptiveCard({
@@ -844,7 +1059,7 @@ class EchoBot extends TeamsActivityHandler {
         });
     }
 
-    createUpdateTicketCard(fields , ticketId) {
+    createUpdateTicketCard(fields, ticketId) {
         const cardBody = [
             {
                 type: 'TextBlock',
@@ -880,12 +1095,41 @@ class EchoBot extends TeamsActivityHandler {
                         value: opt
                     }))
                 });
+            } else if (field.type === 'category-dropdown') {
+                cardBody.push({
+                    type: 'Input.ChoiceSet',
+                    id: 'category',
+                    style: 'compact',
+                    value: field.value,
+                    choices: field.options.map(opt => ({
+                        title: opt,
+                        value: opt.toLowerCase()
+                    })),
+                    valueChangedAction: {
+                        type: 'Action.ResetInputs',
+                        targetInputIds: ['subcategory']
+                    }
+                });
+            } else if (field.type === 'subcategory-dropdown') {
+                cardBody.push({
+                    type: 'Input.ChoiceSet',
+                    id: 'subcategory',
+                    style: 'filtered',
+                    placeholder: 'Select subcategory',
+                    value: field.value,
+                    choices: [],
+                    'choices.data': {
+                        type: 'Data.Query',
+                        dataset: 'subcategories',
+                        associatedInputs: 'auto'
+                    }
+                });
             }
         }
     
         return CardFactory.adaptiveCard({
             $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: '1.4',
+            version: '1.5',
             type: 'AdaptiveCard',
             body: cardBody,
             actions: [
@@ -906,7 +1150,7 @@ class EchoBot extends TeamsActivityHandler {
                 }
             ]
         });
-    }
+    }    
     
 
     createReplyCardAttachment(ticketId) {
