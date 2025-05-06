@@ -2,6 +2,7 @@ const axios = require('axios');
 
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
 const { CardFactory } = require('botbuilder');
+const TicketService = require('./services/TicketService');
 
 async function sendTeamsReply(parentMessageId, ticket, from) {
     const appId = process.env.MicrosoftAppId;
@@ -44,7 +45,7 @@ async function sendTeamsReply(parentMessageId, ticket, from) {
     }
 }
 
-async function sendTeamsChannelMessage(channelId, ticketId, context) {
+async function sendMessageToChannel(channelId, ticketId) {
     const appId = process.env.MicrosoftAppId;
     const appPassword = process.env.MicrosoftAppPassword;
     const tenantId = process.env.MicrosoftAppTenantId;
@@ -53,7 +54,7 @@ async function sendTeamsChannelMessage(channelId, ticketId, context) {
         baseUri: 'https://smba.trafficmanager.net/emea/'
     });
 
-    const activity = await technicianCreateTicketCard(ticketId, context);
+    const activity = await buildTechnicianTicketCard(ticketId);
     const conversationParams = {
         isGroup: true,
         channelData: {
@@ -70,15 +71,67 @@ async function sendTeamsChannelMessage(channelId, ticketId, context) {
     try {
         const response = await connectorClient.conversations.createConversation(conversationParams);
         console.log(`Message sent to Teams channel. Conversation ID: ${response.id}`);
-        return response.id;
+        console.log("Channel response: ", JSON.stringify(response));
+        return { conversationId: response.id, activityId: response.activityId };
     } catch (error) {
         console.error('Error sending message to Teams channel:', error.response?.data || error.message);
     }
     
 }
+async function buildRequesterTicketCard(ticketId) {
+        const ticket = (await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)).data;
+        return {
+            type: "message",
+            attachments: [
+                {
+                    contentType: "application/vnd.microsoft.card.adaptive",
+                    content: {
+                        type: "AdaptiveCard",
+                        $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+                        version: "1.5",
+                        body: [
+                            {
+                                type: "TextBlock",
+                                text: "🎫 Ticket Created",
+                                weight: "Bolder",
+                                size: "Large",
+                                color: "Accent"
+                            },
+                            {
+                                type: "FactSet",
+                                facts: [
+                                    { title: "Ticket ID:", value: ticket.id},
+                                    { title: "Status:", value: ticket.status },
+                                    { title: "Subject:", value: ticket.subject },
+                                    { title: "Priority:", value: ticket.priority },
+                                    { title: "Created By:", value: ticket.email },
+                                    { title: "Technician:", value: ticket.technician }
+                                ]
+                            }
+                        ],
+                        actions: [
+                            {
+                                type: "Action.Submit",
+                                title: "✏️ Update Ticket",
+                                data: {
+                                    msteams: {
+                                        type: "task/fetch"
+                                    },
+                                    action: "updateTicket",
+                                    ticketId: ticket.id,
+                                    data: "updateTicket"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        };
+    }
 
 async function requesterCreateTicketCard(ticketId, context) {
     console.log("Ticket ID inside createTicketCard: ", ticketId);
+    const ticketCard = buildRequesterTicketCard(ticketId);
     return {
         type: "message",
         attachments: [
@@ -126,8 +179,9 @@ async function requesterCreateTicketCard(ticketId, context) {
     };
 }
 
-async function technicianCreateTicketCard(ticketId, context) {
+async function buildTechnicianTicketCard(ticketId, context) {
     console.log("Ticket ID inside createTicketCard: ", ticketId);
+    const ticket = (await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)).data;
     return {
       type: "message",
       attachments: [
@@ -148,10 +202,12 @@ async function technicianCreateTicketCard(ticketId, context) {
               {
                 type: "FactSet",
                 facts: [
-                  { title: "Ticket ID:", value: String(ticketId) },
-                  { title: "Subject:", value: "Sample title" || "N/A" },
-                  { title: "Message:", value: context.activity.text || "N/A" },
-                  { title: "From:", value: context.activity.from.name || "N/A" }
+                    { title: "Ticket ID:", value: ticket.id},
+                    { title: "Status:", value: ticket.status },
+                    { title: "Subject:", value: ticket.subject },
+                    { title: "Priority:", value: ticket.priority },
+                    { title: "Created By:", value: ticket.email },
+                    { title: "Technician:", value: ticket.technician }
                 ]
               }
             ],
@@ -296,4 +352,4 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
     }
 }
 
-module.exports = { sendTeamsReply , sendTeamsChannelMessage, sendTicketReply, requesterCreateTicketCard };
+module.exports = { sendTeamsReply , sendMessageToChannel, sendTicketReply, requesterCreateTicketCard, buildRequesterTicketCard, buildTechnicianTicketCard };
