@@ -20,6 +20,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    requestChannelActivityId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    techChannelActivityId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     privateChannelConversationId: {
       type: DataTypes.STRING,
       allowNull: true

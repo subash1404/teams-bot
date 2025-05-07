@@ -87,6 +87,23 @@ class TicketService {
         }
     }
     
+    async updateUserIdByTeamsObjectId(teamsObjectId, userId) {
+        try {
+            const user = await User.findOne({ where: { teamsObjectId } });
+            if (!user) {
+                throw new Error(`User with teamsObjectId ${teamsObjectId} not found`);
+            }
+            user.userId = userId;
+            await user.save();
+            console.log(`✅ User ID updated for teamsObjectId ${teamsObjectId}`);
+            return user;
+        }
+        catch (error) {
+            console.error('Error updating user ID:', error.message);
+            throw error;
+        }
+    }
+    
     async findEmailByTeamsObjectId(teamsObjectId) {
         try {
             const user  = await User.findOne({ where: { teamsObjectId } });
