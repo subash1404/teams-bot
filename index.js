@@ -4,6 +4,7 @@
 const path = require('path');
 const dotenv = require('dotenv');
 const TicketService = require('./services/TicketService');
+const {initiateConversation} = require('./controller');
 // Import required bot configuration.
 const ENV_FILE = path.join(__dirname, '.env');
 dotenv.config({ path: ENV_FILE });
@@ -104,6 +105,20 @@ server.post('/api/updateTicket', async (req, res) => {
         res.send(500, { error: 'Failed to send reply.', details: error.message });
     }
 });
+
+server.post('/initiate-conversation' , async (req , res) => {
+    const {technicianEmail , requesterEmail , ticketId} = req.body;
+
+    try{
+        await initiateConversation(requesterEmail , technicianEmail , ticketId);
+        res.send(200, { success: true, message: 'Group chat created' });
+    }
+
+    catch{
+        res.send(500, { error: 'Failed to create chat.', details: error.message });
+    }
+    
+})
 
 server.post('/webhook/reply', async (req, res) => {
     try {

@@ -352,4 +352,62 @@ async function sendTicketReply(parentMessageId, ticketId, replyMessage, repliedB
     }
 }
 
-module.exports = { sendTeamsReply , sendMessageToChannel, sendTicketReply, requesterCreateTicketCard, buildRequesterTicketCard, buildTechnicianTicketCard };
+async function initiateConversation( requesterEmail , technicianEmail , ticketId){
+
+        const requesterId = await TicketService.findTeamsObjectIdByEmail(requesterEmail);
+        const technicianId = await TicketService.findTeamsObjectIdByEmail(technicianEmail);
+        const members = [
+            {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "roles": ["owner"],
+            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${requesterId}`
+            },
+            {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "roles": ["owner"],
+            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${technicianId}`
+            }
+        ];
+        
+        const chatResponse = await axios.post(
+            "https://graph.microsoft.com/v1.0/chats",
+            { chatType: "group", members },
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.AccessToken}`,
+                'Content-Type': 'application/json'
+            }
+            }
+        );
+        
+        const chatId = chatResponse.data.id;
+        
+        const botPayload = {
+            "teamsApp@odata.bind": "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/d23b825d-56b0-4513-8bf5-ca30cf290056",
+            "consentedPermissionSet": {
+            "resourceSpecificPermissions": [
+                {
+                "permissionValue": "ChatMessage.Read.Chat",
+                "permissionType": "Application"
+                }
+            ]
+            }
+        };
+        console.log("Before installing bot");
+        await axios.post(
+            `https://graph.microsoft.com/v1.0/chats/${chatId}/installedApps`,
+            botPayload,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.AccessToken}`,
+                'Content-Type': 'application/json'
+            }
+            }
+        );
+
+        await TicketService.updateTicket(ticketId, {
+            privateChannelConversationId: chatId
+        });
+    }
+
+module.exports = { sendTeamsReply , sendMessageToChannel, sendTicketReply, requesterCreateTicketCard, buildRequesterTicketCard, buildTechnicianTicketCard , initiateConversation};

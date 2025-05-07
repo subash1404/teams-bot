@@ -2,7 +2,7 @@ const { TeamsActivityHandler, MessageFactory, CardFactory } = require('botbuilde
 const { BotFrameworkAdapter } = require('botbuilder');
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
 const TicketService = require('./services/TicketService');
-const { sendTeamsReply, sendMessageToChannel, requesterCreateTicketCard, buildRequesterTicketCard, buildTechnicianTicketCard } = require('./controller'); // adjust path as needed
+const { sendTeamsReply, sendMessageToChannel, requesterCreateTicketCard , initiateConversation, buildRequesterTicketCard, buildTechnicianTicketCard } = require('./controller'); // adjust path as needed
 const { TurnContext } = require('botbuilder');
 const { Ticket } = require('./models');
 const { TeamsInfo } = require('botbuilder');
@@ -207,62 +207,56 @@ class EchoBot extends TeamsActivityHandler {
     async onInvokeActivity(context) {
         console.log(`Invoke activity received: ${context.activity.name}`);
 
-        if (context.activity.name === 'task/fetch' && context.activity.value?.dataset === 'subcategories') {
-            const { queryText, data } = invokeActivity.value;
-            const category = data.category;
+        if (context.activity.name === 'application/search' && context.activity.value?.dataset === 'subcategories') {
+            const data = context.activity.value.data;
+            const category = data?.category?.toLowerCase();
         
-            if (!category) {
+            if (!category || !this.subcategoriesMap?.[category]) {
                 return {
                     status: 200,
-                    type: 'application/vnd.microsoft.search.searchResponse',
-                    value: { results: [] }
+                    body: {
+                        type: 'application/vnd.microsoft.search.searchResponse',
+                        value: { results: [] }
+                    }
                 };
             }
         
-            const response = await fetch(`${process.env.BackEndBaseUrl}/ticket/subcategories?category=${category.toLowerCase()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        
-            const allOptions = await response.json();
-        
-            const filteredOptions = allOptions.filter(sub =>
-                sub.title.toLowerCase().includes(queryText.toLowerCase())
-            );
+            const results = this.subcategoriesMap[category].map(sub => ({
+                title: sub,
+                value: sub.toLowerCase()
+            }));
         
             return {
                 status: 200,
-                type: 'application/vnd.microsoft.search.searchResponse',
-                value: {
-                    results: filteredOptions
+                body: {
+                    type: 'application/vnd.microsoft.search.searchResponse',
+                    value: { results }
                 }
             };
-        }        
+        }                
 
-        if (context._activity.name === 'application/search') {
-            const dropdownCard = context._activity.value.data.choiceselect;
-            const searchQuery = context._activity.value.queryText;
+        // if (context._activity.name === 'application/search') {
+        //     const dropdownCard = context._activity.value.data.choiceselect;
+        //     const searchQuery = context._activity.value.queryText;
       
-            const response = await axios.get(`http://registry.npmjs.com/-/v1/search?${querystring.stringify({ text: searchQuery, size: 8 })}`);
-            const npmPackages = response.data.objects.map(obj => ({
-              title: obj.package.name,
-              value: `${obj.package.name} - ${obj.package.description}`
-            }));
+        //     const response = await axios.get(`http://registry.npmjs.com/-/v1/search?${querystring.stringify({ text: searchQuery, size: 8 })}`);
+        //     const npmPackages = response.data.objects.map(obj => ({
+        //       title: obj.package.name,
+        //       value: `${obj.package.name} - ${obj.package.description}`
+        //     }));
       
-            if (response.status === 200) {
-              if (dropdownCard) {
-                return this.getCountrySpecificResults(dropdownCard.toLowerCase());
-              } else {
-                return this.getSuccessResult(npmPackages);
-              }
-            } else if (response.status === 204) {
-              return this.getNoResultFound();
-            } else if (response.status === 500) {
-              return this.getErrorResult();
-            }
-          }
+        //     if (response.status === 200) {
+        //       if (dropdownCard) {
+        //         return this.getCountrySpecificResults(dropdownCard.toLowerCase());
+        //       } else {
+        //         return this.getSuccessResult(npmPackages);
+        //       }
+        //     } else if (response.status === 204) {
+        //       return this.getNoResultFound();
+        //     } else if (response.status === 500) {
+        //       return this.getErrorResult();
+        //     }
+        //   }
         
         if (context.activity.name === 'adaptiveCard/action') {
             console.log('Adaptive card action data:', JSON.stringify(context.activity.value, null, 2));
@@ -275,63 +269,10 @@ class EchoBot extends TeamsActivityHandler {
                     const ticket = await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)
                     const requesterEmail = ticket.data.email;
                     const technicianEmail = ticket.data.technician;
-
-                    const requesterId = await TicketService.findTeamsObjectIdByEmail(requesterEmail);
-                    const technicianId = await TicketService.findTeamsObjectIdByEmail(technicianEmail);
-
-                    const members = [
-                        {
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                            "roles": ["owner"],
-                            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${requesterId}`
-                        },
-                        {
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                            "roles": ["owner"],
-                            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${technicianId}`
-                        }
-                    ];
-
-                    const chatResponse = await axios.post(
-                        "https://graph.microsoft.com/v1.0/chats",
-                        { chatType: "group", members },
-                        {
-                            headers: {
-                                Authorization: `Bearer ${process.env.AccessToken}`,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
-
-                    const chatId = chatResponse.data.id;
-
-                    const botPayload = {
-                        "teamsApp@odata.bind": "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/174915f7-e12a-4e03-a3e9-f86bc337ff38",
-                        "consentedPermissionSet": {
-                            "resourceSpecificPermissions": [
-                                {
-                                    "permissionValue": "ChatMessage.Read.Chat",
-                                    "permissionType": "Application"
-                                }
-                            ]
-                        }
-                    };
-                    console.log("Before installing bot");
-                    await axios.post(
-                        `https://graph.microsoft.com/v1.0/chats/${chatId}/installedApps`,
-                        botPayload,
-                        {
-                            headers: {
-                                Authorization: `Bearer ${process.env.AccessToken}`,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
-
-                    await context.sendActivity(`✅ Group created successfully! [Open Chat](https://teams.microsoft.com/l/chat/0/0?chatId=${chatId})`);
-                    await TicketService.updateTicket(ticketId, {
-                        privateChannelConversationId: chatId
-                    });
+                    
+                    await initiateConversation(requesterEmail , technicianEmail , ticketId);
+                    
+                    await context.sendActivity(`✅ Group created successfully!`);
                     return { status: 200 };
                 } catch (error) {
                     console.error("Error creating group chat:", error);
@@ -342,7 +283,6 @@ class EchoBot extends TeamsActivityHandler {
         }
         return await super.onInvokeActivity(context);
     }
-
 
     async getChannelMessageAttachments(messageId, channelId) {
         const token = process.env.AccessToken;
@@ -439,59 +379,6 @@ class EchoBot extends TeamsActivityHandler {
             console.error(`Error sending message to channel: ${error.message}`);
             throw error;
         }
-    }
-
-    async getDependantSearchCard() {
-        return {
-          "type": "AdaptiveCard",
-          "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
-          "version": "1.5",
-          "body": [
-            {
-              "size": "ExtraLarge",
-              "text": "Country Picker",
-              "weight": "Bolder",
-              "wrap": true,
-              "type": "TextBlock"
-            },
-            {
-              "id": "choiceselect",
-              "type": "Input.ChoiceSet",
-              "label": "Select a country or region:",
-              "choices": [
-                { "title": "USA", "value": "usa" },
-                { "title": "France", "value": "france" },
-                { "title": "India", "value": "india" }
-              ],
-              "valueChangedAction": {
-                "type": "Action.ResetInputs",
-                "targetInputIds": ["city"]
-              },
-              "isRequired": true,
-              "errorMessage": "Please select a country or region"
-            },
-            {
-              "style": "filtered",
-              "choices.data": {
-                "type": "Data.Query",
-                "dataset": "cities",
-                "associatedInputs": "auto"
-              },
-              "id": "city",
-              "type": "Input.ChoiceSet",
-              "label": "Select a city:",
-              "placeholder": "Type to search for a city in the selected country",
-              "isRequired": true,
-              "errorMessage": "Please select a city"
-            }
-          ],
-          "actions": [
-            {
-              "title": "Submit",
-              "type": "Action.Submit"
-            }
-          ]
-        };
     }
 
     async isRequesterChannel(channelId) {
@@ -614,8 +501,10 @@ class EchoBot extends TeamsActivityHandler {
 
             const editableFields = await response.json();
 
-            taskInfo.card = this.createUpdateTicketCard(editableFields, ticketId);
-
+            this.subcategoriesMap = editableFields.find(f => f.name === 'subcategories')?.value || {};
+        
+            taskInfo.card = this.createUpdateTicketCard(editableFields , ticketId);
+        
             this.setTaskInfo(taskInfo, {
                 height: 'medium',
                 width: 'medium',
@@ -909,6 +798,7 @@ class EchoBot extends TeamsActivityHandler {
         ];
 
         for (const field of fields) {
+            if (field.name === 'subcategories') continue;
             cardBody.push({
                 type: 'TextBlock',
                 text: field.name.charAt(0).toUpperCase() + field.name.slice(1),
@@ -944,8 +834,7 @@ class EchoBot extends TeamsActivityHandler {
                         value: opt.toLowerCase()
                     })),
                     valueChangedAction: {
-                        type: 'Action.ResetInputs',
-                        targetInputIds: ['subcategory']
+                        type: 'Action.ResetInputs'
                     }
                 });
             } else if (field.type === 'subcategory-dropdown') {
