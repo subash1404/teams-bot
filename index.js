@@ -63,7 +63,7 @@ adapter.onTurnError = onTurnErrorHandler;
 
 // Create the main dialog.
 const myBot = new EchoBot();
-const { sendTeamsReply, sendTicketReply } = require('./controller');
+const { sendApprovalCard, sendTicketReply } = require('./controller');
 
 // Listen for incoming requests.
 server.post('/api/messages', async (req, res) => {
@@ -77,11 +77,7 @@ server.post('/api/sendReply', async (req, res) => {
     console.log("Message: ", message);
     console.log("Email: ", email);
     try {
-        const ticket = await TicketService.findByTicketId(ticketId);
-        console.log("Ticket: "+ JSON.stringify(ticket));
-        await sendTicketReply(ticket.requestChannelConversationId, ticketId, message, email);
-        console.log("techChannelConversationId: ", ticket.techChannelConversationId);
-        await sendTicketReply(ticket.techChannelConversationId, ticketId, message, email);
+        await send
         res.send(200, { success: true, message: 'Reply sent successfully!' });
     } catch (error) {
         console.error(' Error sending reply:', error.message);
@@ -131,6 +127,23 @@ server.post('/webhook/reply', async (req, res) => {
         res.send(500, { error: 'Failed to send Ticketreply.', details: error.message });
     }
   });  
+
+
+  server.post('/api/initiate-approval', async (req, res) => {
+    const { ticketId, message, email } = req.body;
+    console.log("TicketId: ", ticketId);
+    console.log("Message: ", message);
+    console.log("Email: ", email);
+    try {
+        await sendApprovalCard(ticketId, message, email);
+        console.log("Approval card sent successfully");
+        res.send(200, { success: true, message: 'Approval card sent successfully!' });
+    } catch (error) {
+        console.error(' Error sending reply:', error.message);
+        res.send(500, { error: 'Failed to send reply.', details: error.message });
+    }
+}
+);
 
 // Listen for Upgrade requests for Streaming.
 server.on('upgrade', async (req, socket, head) => {

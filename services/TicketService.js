@@ -24,12 +24,49 @@ class TicketService {
     async findByTicketId(ticketId) {
         try {
             const ticket = await Ticket.findOne({ where: {ticketId} });
-            if (!ticket) {
-                throw new Error(`Ticket with ID ${ticketId} not found`);
-            }
+            // if (!ticket) {
+            //     throw new Error(`Ticket with ID ${ticketId} not found`);
+            // }
             return ticket;
         } catch (error) {
             console.error('Error finding ticket:', error.message);
+            throw error;
+        }
+    }
+
+    async findTeamsUserIdByEmail(email) {
+        try {
+            const user = await User.findOne({ where: { email } });
+            if (!user) {
+                throw new Error(`User with email ${email} not found`);
+            }
+            return user.teamsObjectId;
+        } catch (error) {
+            console.error('Error finding user:', error.message);
+            throw error;
+        }
+    }
+
+    async findTeamIdByChannelId(channelId) {
+        try {
+            const channel = await Channel.findOne({ where: { channelId } });
+            if (!channel) {
+                throw new Error(`Channel with ID ${channelId} not found`);
+            }
+            return channel.teamId;
+        } catch (error) {
+            console.error('Error finding channel:', error.message);
+            throw error;
+        }
+    }
+
+    async findByTeamsObjectId(teamsObjectId) {
+        try {
+            const tickets = await Ticket.findAll({ where: { teamsObjectId } });
+            return tickets;
+        }
+        catch (error) {
+            console.error('Error finding tickets:', error.message);
             throw error;
         }
     }
@@ -103,7 +140,7 @@ class TicketService {
             throw error;
         }
     }
-    
+
     async findEmailByTeamsObjectId(teamsObjectId) {
         try {
             const user  = await User.findOne({ where: { teamsObjectId } });
