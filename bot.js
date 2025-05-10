@@ -1,18 +1,20 @@
 const { TeamsActivityHandler, CardFactory } = require('botbuilder');
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
+const TicketRepository = require('./repository/TicketRepository');
+const ChannelRepository = require('./repository/ChannelRepository');
+const MessageService = require('./services/MessageService');
+const  GroupChatService = require('./services/GroupChatService');
 const TicketService = require('./services/TicketService');
-const { sendTeamsReply, sendMessageToChannel, requesterCreateTicketCard , initiateConversation, buildRequesterTicketCard, buildTechnicianTicketCard } = require('./controller'); // adjust path as needed
-const { TurnContext } = require('botbuilder');
-const { Ticket } = require('./models');
+const DMService = require('./services/DMService');
+const CardService = require('./services/CardService');
+const { isNewMessage, isRequesterChannel } = require('./util/MessageUtil');
 const axios = require('axios');
-const querystring = require('querystring');
-const { Op } = require('sequelize');
 const { Client } = require('@microsoft/microsoft-graph-client');
-// require('isomorphic-fetch');
+const UserRepository = require('./repository/UserRepository');
+const { mapWhereFieldNames } = require('sequelize/lib/utils');
 
 
-
-class EchoBot extends TeamsActivityHandler {
+class TicketBot extends TeamsActivityHandler {
     constructor() {
         super();
         this.baseUrl = process.env.BaseUrl;
@@ -27,104 +29,60 @@ class EchoBot extends TeamsActivityHandler {
         this.onMessage(async (context, next) => {
             console.log("Inside onMessage");
             console.log("context: " + JSON.stringify(context.activity));
-
-            // const attachments = context.activity.attachments;
-            //         if (attachments && attachments.length > 0) {
-            //             console.log(attachments.length)
-            //             console.log("Attachments: "+ JSON.stringify(context.activity));
-            //             for (const attachment of attachments) {
-            //                 console.log(`Received attachment: ${attachment.name}, type: ${attachment.contentType}`);
-            //             }
-            //         } else {
-            //             console.log("Text:", context.activity.text);
-            //     }
-            if (context.activity.conversation.conversationType === 'channel') {
-                // const members = await TeamsInfo.getMembers(context);
-
-                // members.forEach(member => {
-                //     console.log(`Display Name: ${member.name}`);
-                //     console.log(`Teams User ID: ${member.id}`); // This is the Teams-specific user ID
-                //     console.log(`AAD Object ID: ${member.aadObjectId}`); // Use this for Graph API
-                //     console.log('---');
-                // });
-                if (await isReplyMessage(context.activity.conversation.id)) {
+            const conversation = context.activity.conversation;
+            if (conversation.conversationType === 'channel') {
+                if (await isNewMessage(conversation.id)) {
                     try {
-                        // const response = await connectorClient.conversations.createConversation(conversationParams);
-                        // console.log(`Message sent to Teams channel. Conversation ID: ${response.id}`);
-                        console.log("going to call ticket api");
-                        const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
-                        const ticketResponse = await axios.post(`${process.env.BackEndBaseUrl}/create-ticket`, {
-                            client: "Subash",
-                            subject: "Sample Subject",
-                            description: context.activity.text,
-                            status: "TODO",
-                            provider: "TEAMS",
-                            email: email
-                        }, {
-                            headers: {
-                                'Content-Type': 'application/json',
-                            }
-                        });
-                        console.log("Afer call");
-                        const ticketId = ticketResponse.data;
-                        console.log("TicketId inside onMessage: " + JSON.stringify(ticketResponse.data));
-                        const message = await context.sendActivity(await buildRequesterTicketCard(ticketId));
-
+                        const attachments = await this.getChannelMessageAttachments(context.activity.id, context.activity.channelData.teamsChannelId);
+                        // TODO: Fetch subject from attachments
+                        const ticketId = await TicketService.saveTicket(context.activity.from.aadObjectId, context.activity.text);
+                        console.log("TicketId inside onMessage: " + JSON.stringify(ticketId));
+                        const message = await context.sendActivity(await CardService.buildRequesterTicketCard(ticketId));
                         // TODO: fetch agentchannelId from mappings
                         const agentChannelId = '19:REo9NLSxP6Nc3qUn2n8aMivpSuI3y9vrTaEXnGhqldM1@thread.tacv2';
                         console.log("agentChannelId: " + agentChannelId);
-                        const attachments = await this.getChannelMessageAttachments(context.activity.id, context.activity.channelData.teamsChannelId);
                         console.log("Attachments: " + JSON.stringify(attachments));
-                        const { conversationId, activityId } = await sendMessageToChannel(agentChannelId, ticketId, attachments);
-                        const sharePointUrl = "https://superopsinc1.sharepoint.com/sites/Superops-Tickets/Shared%20Documents/Sales/apigateway.postman_collection.json";
-                        // await TicketService.updateTechChannelConversationId(ticketResponse.id, techChannelConversationId)
-                        await TicketService.saveTicket({
+                                const { conversationId, activityId } = await MessageService.sendToChannel(agentChannelId, ticketId, attachments);
+                        await TicketRepository.saveTicket({
                             ticketId: ticketId,
                             requestChannelActivityId: message.id,
-                            requestChannelConversationId: context.activity.conversation.id,
+                            requestChannelConversationId: context.activity.conversation.id, 
                             techChannelConversationId: conversationId,
-                            techChannelActivityId: activityId,
+                            techChannelActivityId: activityId
                         });
-                        console.log("serviveurl:" + context.activity.serviceUrl);
-                        console.log("channelid:" + context.activity.channelId);
                     } catch (error) {
                         console.error('Error sending message to Teams channel:', error.response?.data || error.message);
                     }
                     await next();
                 } else {
-                    console.log("before")
                     var ticket = null;
                     console.log(context.activity.channelData.channel.id);
                     console.log(context.activity.conversation.id);
-                    if (await this.isRequesterChannel(context.activity.channelData.channel.id)) {
+                    if (await isRequesterChannel(context.activity.channelData.channel.id)) {
                         console.log("Message from requester channel");
-                        ticket = await TicketService.findByRequesterChannelConversationId(context.activity.conversation.id);
-                        const parentMessageId = ticket.techChannelConversationId;
-                        console.log(parentMessageId);
+                        ticket = await TicketRepository.findByRequesterChannelConversationId(context.activity.conversation.id);
+                        const conversationId = ticket.techChannelConversationId;
+                        // TODO: mimic this as a user
                         const activity = {
                             type: 'message',
                             text: context.activity.text
                         };
                         try {
-                            const response = await connectorClient.conversations.sendToConversation(parentMessageId, activity);
-
+                            const response = await connectorClient.conversations.sendToConversation(conversationId, activity);
                             console.log(`Message sent successfully with conversation ID: ${response.id}`);
                         } catch (error) {
                             console.error('Error sending message:', error.response?.data || error.message);
                         }
                     } else {
-                        ticket = await TicketService.findByAgentChannelConversationId(context.activity.conversation.id);
+                        ticket = await TicketRepository.findByTechChannelConversationId(context.activity.conversation.id);
                         const parentMessageId = ticket.requestChannelConversationId;
 
-                        // User details
                         const userId = context.activity.from.id;
                         const userName = context.activity.from.name;
                         const messageText = context.activity.text;
 
-                        // Create the adaptive card
                         const userCard = this.createUserProfileCard(userId, userName, messageText);
 
-                        // Create the activity with the card
                         const activity = {
                             type: 'message',
                             attachments: [
@@ -136,7 +94,6 @@ class EchoBot extends TeamsActivityHandler {
                         };
 
                         try {
-                            // If using connector client approach
                             const response = await connectorClient.conversations.sendToConversation(parentMessageId, activity);
                             console.log(`Message sent successfully with conversation ID: ${response.id}`);
                         } catch (error) {
@@ -145,44 +102,16 @@ class EchoBot extends TeamsActivityHandler {
                     }
                     console.log("inside parentMessageId");
                     console.log("TicketId: " + ticket.ticketId)
-                    const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
+                    const user = await UserRepository.findByTeamsObjectId(context.activity.from.aadObjectId);
                     const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
                         message: context.activity.text,
-                        email: email
+                        email: user.email
                     }, { headers: { 'Content-Type': 'application/json' } });
                     console.log("inside parentMessageId1");
                     await next();
                 }
-            } else if (context.activity.conversation.conversationType === 'personal') {
-                const text = context.activity.text.trim().toLowerCase();
-                if (text.includes("view ticket")) {
-                    const parts = text.split("view ticket");
-                    const ticketId = parts.length > 1 ? parts[1].trim() : null;
-                    if (ticketId) {
-                        const ticket = await TicketService.findByTicketId(ticketId);
-                        if (ticket) {
-                            const cardJson = await buildRequesterTicketCard(ticketId);
-                            await sendDM(context.activity.conversation.id, cardJson, context.activity.from.id);
-                        } else {
-                            await context.sendActivity("Ticket not found.");
-                        }
-                    } else {
-                        await context.sendActivity("Please provide a ticket ID.");
-                    }
-                } else if (text === "my tickets") {
-                    const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
-                    const tickets = (await axios.get(`${process.env.BackEndBaseUrl}/tickets?email=${email}`)).data;
-                    console.log("Tickets: " + JSON.stringify(tickets));
-                    if (tickets.length > 0) {
-                        for (const ticket of tickets) {
-                            console.log("TicketId: " + ticket.id)
-                            const card = await buildRequesterTicketCard(ticket.id);
-                            await sendDM(context.activity.conversation.id, card, context.activity.from.id);
-                        }
-                    } else {
-                        await context.sendActivity("No tickets found.");
-                    }
-                }
+            } else if (conversation.conversationType === 'personal') {
+                await DMService.handleDMMessage(context);
                 await next();
             }
             else {
@@ -190,15 +119,7 @@ class EchoBot extends TeamsActivityHandler {
                 // console.log(context.activity.from.aadObjectId);
                 // await context.sendActivity(reply);
                 try {
-                    console.log("Before saving conversation for group chat");
-                    const ticket = await TicketService.findByPrivateChannelConversationId(context.activity.conversation.id);
-                    const email = await TicketService.findEmailByTeamsObjectId(context.activity.from.aadObjectId);
-                    console.log("TicketId: " + ticket.ticketId)
-                    const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
-                        message: context.activity.text,
-                        email: email
-                    }, { headers: { 'Content-Type': 'application/json' } });
-                    console.log("After saving conversation for group chat");
+                    await GroupChatService.postReply(context.activity.text, context.activity.conversation.id, context.activity.from.aadObjectId);
                 } catch (error) {
                     console.error('Error saving message from group chat:', error.response?.data || error.message);
                 }
@@ -212,7 +133,7 @@ class EchoBot extends TeamsActivityHandler {
         console.log(JSON.stringify(context.activity));
         for (const member of membersAdded) {
             if (member.id && member.id.startsWith("29:")) {
-                const user = await TicketService.updateUserIdByTeamsObjectId(member.aadObjectId, member.id);
+                const user = await UserRepository.updateUserIdByTeamsObjectId(member.aadObjectId, member.id);
                 console.log("User: " + JSON.stringify(user));
             }
         }
@@ -245,7 +166,7 @@ class EchoBot extends TeamsActivityHandler {
         if (context.activity.name === 'application/search' && context.activity.value?.dataset === 'subcategories') {
             const data = context.activity.value.data;
             const category = data?.category?.toLowerCase();
-        
+
             if (!category || !this.subcategoriesMap?.[category]) {
                 return {
                     status: 200,
@@ -255,12 +176,12 @@ class EchoBot extends TeamsActivityHandler {
                     }
                 };
             }
-        
+
             const results = this.subcategoriesMap[category].map(sub => ({
                 title: sub,
                 value: sub.toLowerCase()
             }));
-        
+
             return {
                 status: 200,
                 body: {
@@ -273,13 +194,13 @@ class EchoBot extends TeamsActivityHandler {
         // if (context._activity.name === 'application/search') {
         //     const dropdownCard = context._activity.value.data.choiceselect;
         //     const searchQuery = context._activity.value.queryText;
-      
+
         //     const response = await axios.get(`http://registry.npmjs.com/-/v1/search?${querystring.stringify({ text: searchQuery, size: 8 })}`);
         //     const npmPackages = response.data.objects.map(obj => ({
         //       title: obj.package.name,
         //       value: `${obj.package.name} - ${obj.package.description}`
         //     }));
-      
+
         //     if (response.status === 200) {
         //       if (dropdownCard) {
         //         return this.getCountrySpecificResults(dropdownCard.toLowerCase());
@@ -292,7 +213,7 @@ class EchoBot extends TeamsActivityHandler {
         //       return this.getErrorResult();
         //     }
         //   }
-        
+        // TODO: Extract this to a function, this is repeated in initiateConversation
         if (context.activity.name === 'adaptiveCard/action') {
             console.log('Adaptive card action data:', JSON.stringify(context.activity.value, null, 2));
 
@@ -304,61 +225,8 @@ class EchoBot extends TeamsActivityHandler {
                     const ticket = await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)
                     const requesterEmail = ticket.data.email;
                     const technicianEmail = ticket.data.technician;
-                    
-                    await initiateConversation(requesterEmail , technicianEmail , ticketId);
-                    const requesterId = await TicketService.findTeamsObjectIdByEmail(requesterEmail);
-                    const technicianId = await TicketService.findTeamsObjectIdByEmail(technicianEmail);
-
-                    const members = [
-                        {
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                            "roles": ["owner"],
-                            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${requesterId}`
-                        },
-                        {
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                            "roles": ["owner"],
-                            "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${technicianId}`
-                        }
-                    ];
-
-                    const chatResponse = await axios.post(
-                        "https://graph.microsoft.com/v1.0/chats",
-                        { chatType: "group", members },
-                        {
-                            headers: {
-                                Authorization: `Bearer ${process.env.AccessToken}`,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
-
-                    const chatId = chatResponse.data.id;
-
-                    const botPayload = {
-                        "teamsApp@odata.bind": "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/174915f7-e12a-4e03-a3e9-f86bc337ff38",
-                        "consentedPermissionSet": {
-                            "resourceSpecificPermissions": [
-                                {
-                                    "permissionValue": "ChatMessage.Read.Chat",
-                                    "permissionType": "Application"
-                                }
-                            ]
-                        }
-                    };
-                    console.log("Before installing bot");
-                    await axios.post(
-                        `https://graph.microsoft.com/v1.0/chats/${chatId}/installedApps`,
-                        botPayload,
-                        {
-                            headers: {
-                                Authorization: `Bearer ${process.env.AccessToken}`,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
+                    await GroupChatService.initiateGroupChat(requesterEmail, technicianEmail, ticketId);
                     await context.sendActivity(`✅ Group created successfully!`);
-                    return { status: 200 };
                 } catch (error) {
                     console.error("Error creating group chat:", error);
                     await context.sendActivity("Failed to create group chat. Please try again later.");
@@ -366,7 +234,7 @@ class EchoBot extends TeamsActivityHandler {
                 }
             } else if (context.activity.value && context.activity.value.action.verb === 'approveTicket') {
                 console.log("COntext in approveTicket: " + JSON.stringify(context.activity))
-                await this.updateCard(context.activity.conversation.id, context.activity.replyToId, await buildInitiateApprovalCard(context.activity.value.action.data.ticketId, context.activity.value.action.data.message, "APPROVED"));
+                await this.updateCard(context.activity.conversation.id, context.activity.replyToId, await CardService.buildInitiateApprovalCard(context.activity.value.action.data.ticketId, context.activity.value.action.data.message, "APPROVED"));
                 await axios.post(`${process.env.BackEndBaseUrl}/ticket/${context.activity.value.action.data.ticketId}/approval`, {
                     status: "APPROVED"
                 }, {
@@ -377,7 +245,7 @@ class EchoBot extends TeamsActivityHandler {
                 console.log("Ticket approved successfully");
                 return { status: 200 };
             } else if (context.activity.value && context.activity.value.action.verb === 'rejectTicket') {
-                await this.updateCard(context.activity.conversation.id, context.activity.replyToId, await buildInitiateApprovalCard(context.activity.value.action.data.ticketId, context.activity.value.action.data.message, "REJECTED"));
+                await this.updateCard(context.activity.conversation.id, context.activity.replyToId, await CardService.buildInitiateApprovalCard(context.activity.value.action.data.ticketId, context.activity.value.action.data.message, "REJECTED"));
                 await axios.post(`${process.env.BackEndBaseUrl}/ticket/${context.activity.value.action.data.ticketId}/approval`, {
                     status: "REJECTED"
                 }, {
@@ -393,12 +261,9 @@ class EchoBot extends TeamsActivityHandler {
         return await super.onInvokeActivity(context);
     }
 
-
-
-
     async getChannelMessageAttachments(messageId, channelId) {
         const token = process.env.AccessToken;
-        const teamId = await TicketService.findTeamIdByChannelId(channelId);
+        const teamId = await ChannelRepository.findByChannelId(channelId);
         console.log("TeamId and channelId: " + teamId + " " + channelId);
         const client = Client.init({
             authProvider: (done) => {
@@ -407,6 +272,8 @@ class EchoBot extends TeamsActivityHandler {
         });
 
         try {
+
+            // TODO: use axios?
             const message = await client
                 .api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}`)
                 .get();
@@ -471,7 +338,7 @@ class EchoBot extends TeamsActivityHandler {
             'zip': 'application/zip',
             'json': 'application/json'
         };
-        
+
         return mimeTypes[ext] || 'application/octet-stream';
     }
 
@@ -505,42 +372,42 @@ class EchoBot extends TeamsActivityHandler {
         return card;
     }
 
-    async sendMessageToChannel(context, botAppId, targetChannelId, message) {
-        try {
-            // Create reference parameters
-            const reference = {
-                bot: {
-                    id: botAppId
-                },
-                channelId: context.activity.channelId,
-                serviceUrl: context.activity.serviceUrl,
-                conversation: {
-                    id: targetChannelId
-                }
-            };
+    // async sendMessageToChannel(context, botAppId, targetChannelId, message) {
+    //     try {
+    //         // Create reference parameters
+    //         const reference = {
+    //             bot: {
+    //                 id: botAppId
+    //             },
+    //             channelId: context.activity.channelId,
+    //             serviceUrl: context.activity.serviceUrl,
+    //             conversation: {
+    //                 id: targetChannelId
+    //             }
+    //         };
 
-            // Use continueConversation with the proper approach for your SDK version
-            await context.adapter.continueConversationAsync(
-                botAppId,
-                reference,
-                async (turnContext) => {
-                    // Create the activity to send
-                    const activity = typeof message === 'string'
-                        ? { type: 'message', text: message }
-                        : message;
+    //         // Use continueConversation with the proper approach for your SDK version
+    //         await context.adapter.continueConversationAsync(
+    //             botAppId,
+    //             reference,
+    //             async (turnContext) => {
+    //                 // Create the activity to send
+    //                 const activity = typeof message === 'string'
+    //                     ? { type: 'message', text: message }
+    //                     : message;
 
-                    // Send the message
-                    const sentActivity = await turnContext.sendActivity(activity);
-                    console.log(JSON.stringify(sentActivity))
-                    console.log(`Message sent to channel ${targetChannelId}, message ID: ${sentActivity.id}`);
-                    return sentActivity;
-                }
-            );
-        } catch (error) {
-            console.error(`Error sending message to channel: ${error.message}`);
-            throw error;
-        }
-    }
+    //                 // Send the message
+    //                 const sentActivity = await turnContext.sendActivity(activity);
+    //                 console.log(JSON.stringify(sentActivity))
+    //                 console.log(`Message sent to channel ${targetChannelId}, message ID: ${sentActivity.id}`);
+    //                 return sentActivity;
+    //             }
+    //         );
+    //     } catch (error) {
+    //         console.error(`Error sending message to channel: ${error.message}`);
+    //         throw error;
+    //     }
+    // }
 
     async getDependantSearchCard() {
         return {
@@ -595,49 +462,6 @@ class EchoBot extends TeamsActivityHandler {
         };
     }
 
-    async isRequesterChannel(channelId) {
-        const channel = await TicketService.findChannelById(channelId)
-        console.log("Channel: " + JSON.stringify(channel));
-        return channel?.type === 'PUBLIC';
-    }
-
-    async syncRequesterMessageToAgent(context) {
-        const parentMessageId = "1744875541389";
-        const agentChannelId = '19:REo9NLSxP6Nc3qUn2n8aMivpSuI3y9vrTaEXnGhqldM1@thread.tacv2';
-
-        // Get the conversation reference for the parent message
-        const conversationReference = {
-            channelId: context.activity.channelId,
-            serviceUrl: context.activity.serviceUrl,
-            conversation: {
-                id: agentChannelId,
-                isGroup: true
-            },
-            user: context.activity.from
-        };
-
-        // Get message content 
-        const messageContent = context.activity.text;
-
-        // Create a new activity as a reply
-        await context.adapter.continueConversationAsync(
-            process.env.MicrosoftAppId,
-            conversationReference,
-            async (newContext) => {
-                const replyActivity = {
-                    type: 'message',
-                    text: `**Requester asked:** ${messageContent}`,
-                    channelData: {
-                        replyToId: parentMessageId
-                    }
-                };
-
-                await newContext.sendActivity(replyActivity);
-            }
-        );
-    }
-
-
     async handleTeamsTaskModuleFetch(context, taskModuleRequest) {
         console.log("Inside handleTeamsTaskModuleFetch")
         const cardTaskFetchValue = taskModuleRequest.data.data;
@@ -645,25 +469,7 @@ class EchoBot extends TeamsActivityHandler {
 
         console.log("cardTaskFetchValue: " + cardTaskFetchValue)
 
-        if (cardTaskFetchValue === 'adaptiveCard') {
-            taskInfo.card = this.createAdaptiveCardAttachment();
-            this.setTaskInfo(taskInfo, {
-                height: 'medium',
-                width: 'medium',
-                title: 'Fill the form'
-            });
-        } else if (cardTaskFetchValue === 'replyTicket') {
-            const ticketId = taskModuleRequest.data.ticketId;
-            console.log("Ticketid: " + ticketId)
-            console.log("Ticketid: " + JSON.stringify(taskModuleRequest.data))
-            taskInfo.card = this.createReplyCardAttachment(ticketId);
-            this.setTaskInfo(taskInfo, {
-                height: 'medium',
-                width: 'medium',
-                title: 'Reply to Ticket'
-            });
-        }
-        else if (cardTaskFetchValue === 'addNote') {
+        if (cardTaskFetchValue === 'addNote') {
             const ticketId = taskModuleRequest.data.ticketId;
 
             return {
@@ -678,19 +484,9 @@ class EchoBot extends TeamsActivityHandler {
                 }
             };
         }
-        // else if (cardTaskFetchValue === 'conversation') {
-        //     const cardJson = await createUserSelectionCard();
-        //     const adaptiveCard = CardFactory.adaptiveCard(cardJson);
-        //     taskInfo.card = adaptiveCard;
-        //     this.setTaskInfo(taskInfo, {
-        //         height: 'medium',
-        //         width: 'medium',
-        //         title: 'initiate chat'
-        //     });
-        // } 
         else if (cardTaskFetchValue === 'techAssign') {
             console.log('data: ' + JSON.stringify(taskModuleRequest.data));
-            const cardJson = await createTechnicianAssignmentCard(taskModuleRequest.data.ticketId);
+            const cardJson = await CardService.buildTechnicianAssignmentCard(taskModuleRequest.data.ticketId);
             const adaptiveCard = CardFactory.adaptiveCard(cardJson);
             taskInfo.card = adaptiveCard;
             this.setTaskInfo(taskInfo, {
@@ -716,9 +512,9 @@ class EchoBot extends TeamsActivityHandler {
             const editableFields = await response.json();
 
             this.subcategoriesMap = editableFields.find(f => f.name === 'subcategories')?.value || {};
-        
-            taskInfo.card = this.createUpdateTicketCard(editableFields , ticketId);
-        
+
+            taskInfo.card = this.createUpdateTicketCard(editableFields, ticketId);
+
             this.setTaskInfo(taskInfo, {
                 height: 'medium',
                 width: 'medium',
@@ -737,28 +533,6 @@ class EchoBot extends TeamsActivityHandler {
         const submittedData = taskModuleRequest.data;
         console.log(taskModuleRequest.data.selectedUsers)
 
-        // if (submittedData.action === 'submitTicket') {
-        //     console.log('Ticket submitted:', submittedData);
-
-        //     await TicketService.saveTicket({
-        //         name: context.activity.from.name,
-        //         messageId: context.activity.id,
-        //         body: submittedData.description,
-        //         dept: submittedData.department,
-        //         title: submittedData.title,
-        //         conversationId: context.activity.conversation.id
-        //     });
-
-        //     const team = await TicketService.getTeamByDeptName(submittedData.department)
-        //     const ticket = await TicketService.getTicketByMessageId(context.activity.id)
-        //     const from = context.activity.from.id;
-        //     console.log("From User id: " + from)
-        //     await sendTeamsReply(null, ticket, from)
-        //     await sendTeamsChannelMessage(team.channelId, ticket)
-        //     await context.sendActivity(MessageFactory.text("Ticket created successfully"));
-        //     return null;return null;
-
-        // } else
         if (submittedData.action === 'submitNote') {
             const ticketId = submittedData.ticketId;
             const noteText = submittedData.noteText;
@@ -808,17 +582,15 @@ class EchoBot extends TeamsActivityHandler {
 
             const updatedTicketId = await response.text();
 
-            // const updatedTicket = await TicketService.getTicketByTicketId(updatedTicketId);
 
             await context.sendActivity({
                 type: "message",
                 text: `✅ Ticket #${updatedTicketId} updated successfully!`
             });
 
-            // await context.sendActivity(await createTicketCard(updatedTicket));
         }
         else if (submittedData.action === 'assignTechnician') {
-            const ticket = await TicketService.findByTicketId(submittedData.ticketId);
+            const ticket = await TicketRepository.findByTicketId(submittedData.ticketId);
             if (!ticket) {
                 await context.sendActivity(`Ticket not found.`);
             }
@@ -832,8 +604,8 @@ class EchoBot extends TeamsActivityHandler {
                 ticketId: submittedData.ticketId,
                 technician: technicianEmail
             }, { headers: { 'Content-Type': 'application/json' } });
-            const requesterCard = await buildRequesterTicketCard(ticketId);
-            const technicianCard = await buildTechnicianTicketCard(ticketId);
+            const requesterCard = await CardService.buildRequesterTicketCard(ticketId);
+            const technicianCard = await CardService.buildTechnicianTicketCard(ticketId);
             await this.updateCard(ticket.techChannelConversationId, ticket.techChannelActivityId, technicianCard);
             await this.updateCard(ticket.requestChannelConversationId, ticket.requestChannelActivityId, requesterCard);
 
@@ -844,47 +616,12 @@ class EchoBot extends TeamsActivityHandler {
             return null;
         }
     }
-
-    // delay(ms) {
-    //     return new Promise(resolve => setTimeout(resolve, ms));
-    // }
-
-    // Utility to set size and title of task module
     setTaskInfo(taskInfo, uiSettings) {
         taskInfo.height = uiSettings.height;
         taskInfo.width = uiSettings.width;
         taskInfo.title = uiSettings.title;
     }
 
-
-    // Send an Adaptive Card with action buttons
-    getTaskModuleAdaptiveCardOptions() {
-        const adaptiveCard = {
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: '1.0',
-            type: 'AdaptiveCard',
-            body: [
-                {
-                    type: 'TextBlock',
-                    text: 'Click below to open the form',
-                    weight: 'bolder',
-                    size: 'medium'
-                }
-            ],
-            actions: [
-                {
-                    type: 'Action.Submit',
-                    title: 'Open Form',
-                    data: {
-                        msteams: { type: 'task/fetch' },
-                        data: 'adaptiveCard'
-                    }
-                }
-            ]
-        };
-
-        return CardFactory.adaptiveCard(adaptiveCard);
-    }
 
     getAddNoteAdaptiveCard(ticketId) {
         return CardFactory.adaptiveCard({
@@ -915,91 +652,6 @@ class EchoBot extends TeamsActivityHandler {
             ],
             $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
             version: '1.4'
-        });
-    }
-    // The form that opens inside the Task Module
-    createAdaptiveCardAttachment() {
-        return CardFactory.adaptiveCard({
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: '1.4',
-            type: 'AdaptiveCard',
-            body: [
-                {
-                    type: 'TextBlock',
-                    text: 'Create a New Ticket',
-                    weight: 'Bolder',
-                    size: 'Medium',
-                    wrap: true
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Title',
-                    wrap: true
-                },
-                {
-                    type: 'Input.Text',
-                    id: 'title',
-                    placeholder: 'Enter ticket title'
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Description',
-                    wrap: true
-                },
-                {
-                    type: 'Input.Text',
-                    id: 'description',
-                    placeholder: 'Enter ticket description',
-                    isMultiline: true
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Department',
-                    wrap: true
-                },
-                {
-                    type: 'Input.ChoiceSet',
-                    id: 'department',
-                    style: 'compact',
-                    choices: [
-                        { title: 'HR', value: 'hr' },
-                        { title: 'Engineering', value: 'engineering' },
-                        { title: 'Sales', value: 'sales' }
-                    ]
-                },
-                {
-                    type: 'TextBlock',
-                    text: 'Priority',
-                    wrap: true
-                },
-                {
-                    type: 'Input.ChoiceSet',
-                    id: 'priority',
-                    style: 'compact',
-                    choices: [
-                        { title: 'Low', value: 'low' },
-                        { title: 'Medium', value: 'medium' },
-                        { title: 'High', value: 'high' },
-                        { title: 'Critical', value: 'critical' }
-                    ]
-                }
-            ],
-            actions: [
-                {
-                    type: 'Action.Submit',
-                    title: 'Submit',
-                    data: {
-                        action: 'submitTicket'
-                    }
-                },
-                {
-                    type: 'Action.Submit',
-                    title: 'Cancel',
-                    data: {
-                        action: 'cancelTicket'
-                    }
-                }
-            ]
         });
     }
 
@@ -1096,155 +748,7 @@ class EchoBot extends TeamsActivityHandler {
         });
     }
 
-
-    createReplyCardAttachment(ticketId) {
-        return CardFactory.adaptiveCard({
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "type": "AdaptiveCard",
-            "version": "1.4",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Reply to the ticket:",
-                    "wrap": true
-                },
-                {
-                    "type": "Input.Text",
-                    "id": "userReply",
-                    "placeholder": "Type your reply here"
-                }
-            ],
-            "actions": [
-                {
-                    "type": "Action.Submit",
-                    "title": "Submit Reply",
-                    "data": {
-                        "action": "submitReply",
-                        "ticketId": ticketId
-                    }
-                }
-            ]
-        });
-    }
 }
 
-async function isReplyMessage(id) {
-    const foundTicket = await Ticket.findOne({
-        where: {
-            [Op.or]: [
-                { requestChannelConversationId: id },
-                { techChannelConversationId: id }
-            ]
-        }
-    });
-    return !foundTicket
-}
 
-async function createUserSelectionCard() {
-    try {
-        const users = await TicketService.getAllUsers();
-
-        const choices = users.map(user => ({
-            title: user.displayName,
-            value: user.id
-        }));
-
-        const card = {
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "type": "AdaptiveCard",
-            "version": "1.5",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Create a Group",
-                    "weight": "Bolder",
-                    "size": "Medium"
-                },
-                {
-                    "type": "TextBlock",
-                    "text": "Select users to add to the group:",
-                    "wrap": true
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "selectedUsers",
-                    "isMultiSelect": true,
-                    "style": "expanded",
-                    "choices": choices
-                }
-            ],
-            "actions": [
-                {
-                    "type": "Action.Submit",
-                    "title": "Create Group",
-                    "data": {
-                        "action": "createGroup"
-                    }
-                }
-            ]
-        };
-
-        return card;
-
-    } catch (err) {
-        console.error("Error fetching users:", err);
-        throw err;
-    }
-}
-
-async function createTechnicianAssignmentCard(ticketId) {
-    console.log("TicketId: " + ticketId)
-    try {
-        const technicians = await axios.get(`${process.env.BackEndBaseUrl}/technicians?source=TEAMS`)
-        console.log(technicians)
-        const choices = technicians.data.map(tech => ({
-            title: tech.name,
-            value: JSON.stringify({ name: tech.name, email: tech.email })
-        }));
-
-
-        const card = {
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "type": "AdaptiveCard",
-            "version": "1.5",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Assign Technician",
-                    "weight": "Bolder",
-                    "size": "Medium"
-                },
-                {
-                    "type": "TextBlock",
-                    "text": "Select a technician to assign to this ticket:",
-                    "wrap": true
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "selectedTechnician",
-                    "isMultiSelect": false,
-                    "style": "expanded",
-                    "choices": choices
-                }
-            ],
-            "actions": [
-                {
-                    "type": "Action.Submit",
-                    "title": "✅ Assign Technician",
-                    "data": {
-                        "action": "assignTechnician",
-                        "ticketId": ticketId
-                    }
-                }
-            ]
-        };
-
-        return card;
-
-    } catch (err) {
-        console.error("Error fetching technicians:", err);
-        throw err;
-    }
-}
-
-module.exports.EchoBot = EchoBot;
+module.exports.TicketBot = TicketBot;

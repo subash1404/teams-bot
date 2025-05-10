@@ -1,3 +1,3 @@
 const axios = require('axios');
-const { sendTicketReply } = require('./controller');
+const { sendTicketReply } = require('./services/MessageService');
 
