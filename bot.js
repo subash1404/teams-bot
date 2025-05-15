@@ -2,6 +2,7 @@ const { TeamsActivityHandler, CardFactory } = require('botbuilder');
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
 const TicketRepository = require('./repository/TicketRepository');
 const ChannelRepository = require('./repository/ChannelRepository');
+const IMChannelPublicToPrivateRepository = require('./repository/IMChannelPublicToPrivateRepository');
 const MessageService = require('./services/MessageService');
 const GroupChatService = require('./services/GroupChatService');
 const TicketService = require('./services/TicketService');
@@ -38,11 +39,11 @@ class TicketBot extends TeamsActivityHandler {
                         const ticketId = await TicketService.saveTicket(context.activity.from.aadObjectId, attachments, context.activity.text);
                         console.log("TicketId inside onMessage: " + JSON.stringify(ticketId));
                         const message = await context.sendActivity(await CardService.buildRequesterTicketCard(ticketId));
-                        // TODO: fetch agentchannelId from mappings
-                        const agentChannelId = '19:REo9NLSxP6Nc3qUn2n8aMivpSuI3y9vrTaEXnGhqldM1@thread.tacv2';
-                        console.log("agentChannelId: " + agentChannelId);
+                        const channelMapping = await IMChannelPublicToPrivateRepository.findByPublicChannelId(context.activity.channelData.teamsChannelId);
+                        console.log(context.activity.channelData.teamsChannelId);
+                        console.log("agentChannelId: " + channelMapping.privateChannelId);
                         console.log("Attachments: " + JSON.stringify(attachments));
-                        const { conversationId, activityId } = await MessageService.sendToChannel(agentChannelId, ticketId, attachments);
+                        const { conversationId, activityId } = await MessageService.sendToChannel(channelMapping.privateChannelId, ticketId, attachments);
                         await TicketRepository.saveTicket({
                             id: ticketId,
                             requestChannelActivityId: message.id,
@@ -112,6 +113,26 @@ class TicketBot extends TeamsActivityHandler {
                     await next();
                 }
             } else if (conversation.conversationType === 'personal') {
+                // await context.sendActivity({
+                //     type: 'message',
+                //     text: 'Here is the downloaded file:',
+                //     attachments: [
+                //       {
+                //         contentType: 'application/vnd.microsoft.card.thumbnail',
+                //         content: {
+                //           title: 'Downloaded Message',
+                //           text: 'Click to open the file',
+                //           buttons: [
+                //             {
+                //               type: 'openUrl',
+                //               title: 'View File',
+                //               value: 'https://superopsinc1.sharepoint.com/sites/Superops-Tickets/Shared%20Documents/It-help/Internship%20report-1.pdf'
+                //             }
+                //           ]
+                //         }
+                //       }
+                //     ]
+                //   });                  
                 await DMService.handleDMMessage(context);
                 await next();
             }
