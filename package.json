@@ -1,5 +1,5 @@
 {
-    "name": "echobot",
+    "name": "ticketbot",
     "version": "1.0.0",
     "description": "Bot Builder v4 echo bot sample",
     "author": "Microsoft",
@@ -16,10 +16,12 @@
         "url": "https://github.com"
     },
     "dependencies": {
+        "@microsoft/microsoft-graph-client": "^3.0.7",
         "botbuilder": "~4.23.0",
         "dotenv": "^8.2.0",
         "mysql2": "^3.14.0",
         "restify": "~10.0.0",
+        "restify-router": "^0.6.2",
         "sequelize": "^6.37.7"
     },
     "devDependencies": {
