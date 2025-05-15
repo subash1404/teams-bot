@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
-const { CardFactory } = require('botbuilder');
+const { CardFactory, UserState } = require('botbuilder');
 const UserRepository = require('../repository/UserRepository');
 const CardService = require('./CardService');
 
@@ -278,44 +278,13 @@ class MessageService {
             baseUri: 'https://smba.trafficmanager.net/emea/'
         });
 
-        const activity = {
-            type: 'message',
-            attachments: [
-                CardFactory.adaptiveCard({
-                    type: 'AdaptiveCard',
-                    version: '1.3',
-                    body: [
-                        {
-                            type: 'TextBlock',
-                            text: `Ticket ID: ${ticketId}`,
-                            weight: 'bolder',
-                            size: 'medium'
-                        },
-                        {
-                            type: 'TextBlock',
-                            text: `Replied By: ${repliedBy}`,
-                            wrap: true
-                        },
-                        {
-                            type: 'TextBlock',
-                            text: `Message: ${replyMessage}`,
-                            wrap: true
-                        }
-                    ],
-                    actions: [
-                        {
-                            type: 'Action.Submit',
-                            title: 'Reply',
-                            data: {
-                                msteams: { type: 'task/fetch' },
-                                data: 'replyTicket',
-                                ticketId: ticketId
-                            }
-                        }
-                    ]
-                })
-            ]
-        };
+        const user = await UserRepository.findByEmail(repliedBy);
+        const email = "subash@superopsinc1.onmicrosoft.com"
+        // TODO: save displayName in the user table
+        const userName = "Subash V"
+        const profileBase64 = await this.getUserProfilePhotoBase64(email, process.env.AccessToken)
+        console.log("After fetching profile")
+        const activity = await CardService.createUserProfileCard(userName, replyMessage,profileBase64);
 
         if (parentMessageId) {
             try {
@@ -327,6 +296,25 @@ class MessageService {
             }
         }
     }
+
+        // TODO: Move this to userService
+        async getUserProfilePhotoBase64(email, accessToken) {
+            try {
+                const response = await axios.get(`https://graph.microsoft.com/v1.0/users/${email}/photo/$value`, {
+                    responseType: 'arraybuffer',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                const contentType = response.headers['content-type'];
+                const base64Image = Buffer.from(response.data, 'binary').toString('base64');
+                return `data:${contentType};base64,${base64Image}`;
+            } catch (error) {
+                console.error(`⚠️ Failed to fetch profile photo for ${email}:`, error.response?.status, error.message);
+                // Fallback to a default avatar if needed
+                return 'https://adaptivecards.io/content/PersonPlaceholder.png';
+            }
+        }
 
     async sendApprovalCard(ticketId, message, email) {
         const teamsUserId = await UserRepository.findByEmail(email).userId;

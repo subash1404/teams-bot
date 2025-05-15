@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { Ticket } = require('../models');
+const ChannelRepository = require('../repository/ChannelRepository');
 async function isNewMessage(id) {
     const foundTicket = await Ticket.findOne({
         where: {
