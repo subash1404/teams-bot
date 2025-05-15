@@ -279,9 +279,9 @@ class MessageService {
         });
 
         const user = await UserRepository.findByEmail(repliedBy);
-        const email = "subash@superopsinc1.onmicrosoft.com"
+        const email = "praveen@superopsinc1.onmicrosoft.com"
         // TODO: save displayName in the user table
-        const userName = "Subash V"
+        const userName = "Praveenkumar Rajendran"
         const profileBase64 = await this.getUserProfilePhotoBase64(email, process.env.AccessToken)
         console.log("After fetching profile")
         const activity = await CardService.createUserProfileCard(userName, replyMessage,profileBase64);

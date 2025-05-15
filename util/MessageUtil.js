@@ -2,6 +2,8 @@ const { Op } = require('sequelize');
 const { Ticket } = require('../models');
 const ChannelRepository = require('../repository/ChannelRepository');
 async function isNewMessage(id) {
+    const channel = await ChannelRepository.findByChannelId("19:013e15d8e0ee4e84a3b3c13bd09f13cf@thread.tacv2");
+    console.log("Channel: "+ JSON.stringify(channel));
     const foundTicket = await Ticket.findOne({
         where: {
             [Op.or]: [

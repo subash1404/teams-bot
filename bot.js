@@ -36,7 +36,7 @@ class TicketBot extends TeamsActivityHandler {
                     try {
                         const attachments = await this.getChannelMessageAttachments(context.activity.id, context.activity.channelData.teamsChannelId);
                         // TODO: Fetch subject from attachments
-                        const ticketId = await TicketService.saveTicket(context.activity.from.aadObjectId, context.activity.text);
+                        const ticketId = await TicketService.saveTicket(context.activity.from.aadObjectId, attachments, context.activity.text);
                         console.log("TicketId inside onMessage: " + JSON.stringify(ticketId));
                         const message = await context.sendActivity(await CardService.buildRequesterTicketCard(ticketId));
                         // TODO: fetch agentchannelId from mappings
@@ -258,7 +258,8 @@ class TicketBot extends TeamsActivityHandler {
 
     async getChannelMessageAttachments(messageId, channelId) {
         const token = process.env.AccessToken;
-        const teamId = await ChannelRepository.findByChannelId(channelId);
+        const Channel = await ChannelRepository.findByChannelId(channelId);
+        const teamId = Channel.teamId;
         console.log("TeamId and channelId: " + teamId + " " + channelId);
         const client = Client.init({
             authProvider: (done) => {
@@ -275,7 +276,8 @@ class TicketBot extends TeamsActivityHandler {
             // console.log("Message: " + JSON.stringify(message));
 
             const siteId = "superopsinc1.sharepoint.com,344677b1-936a-446e-834a-6555914e2131,8ae85b51-3890-471c-b31e-3d08de68cbaf";
-            const ChannelName = "Sales";
+            const ChannelName = "It-help";
+            console.log("Attachment message: " +JSON.stringify(message.subject))
 
             if (message.attachments && message.attachments.length > 0) {
                 console.log(`Message has ${message.attachments.length} attachments.`);
@@ -308,7 +310,7 @@ class TicketBot extends TeamsActivityHandler {
                 return processedAttachments;
             }
 
-            return [];
+            return message.subject;
         } catch (error) {
             console.error('Error retrieving message attachments:', error);
             return [];
