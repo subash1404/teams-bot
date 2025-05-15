@@ -9,7 +9,7 @@ class DMService {
             const parts = message.split("view ticket");
             const ticketId = parts.length > 1 ? parts[1].trim() : null;
             if (ticketId) {
-                const ticket = await TicketRepository.findByTicketId(ticketId);
+                const ticket = await TicketRepository.findById(ticketId);
                 if (ticket) {
                     const cardJson = await CardService.buildRequesterTicketCard(ticketId);
                     await MessageService.sendToUser(context.activity.conversation.id, cardJson, context.activity.from.id);

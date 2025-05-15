@@ -1,30 +1,28 @@
 'use strict';
-const { Model } = require('sequelize');
+const { sequelize } = require('../config/db');
+const { DataTypes } = require('sequelize');
 
-// models/Team.js
-module.exports = (sequelize, DataTypes) => {
-    const Team = sequelize.define('Team', {
-      id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true
-      },
-      department: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      teamId: {
-        type: DataTypes.STRING,
-        allowNull: false
-      },
-      channelId: {
-        type: DataTypes.STRING,
-        allowNull: false
-      }
-    }, {
-      tableName: 'Teams',
-      timestamps: false 
-    });
-  
-    return Team;
-  };  
+const Team = sequelize.define('Team', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  department: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  teamId: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  channelId: {
+    type: DataTypes.STRING,
+    allowNull: false
+  }
+}, {
+  tableName: 'Teams',
+  timestamps: false
+});
+
+module.exports = Team;

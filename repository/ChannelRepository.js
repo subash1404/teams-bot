@@ -1,4 +1,4 @@
-const { Channel } = require('../models');
+const Channel  = require('../models/Channel');
 class ChannelRepository {
     async findByChannelId(channelId) {
         return await Channel.findOne({ where: { channelId } });

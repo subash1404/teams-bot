@@ -11,7 +11,6 @@ const { isNewMessage, isRequesterChannel } = require('./util/MessageUtil');
 const axios = require('axios');
 const { Client } = require('@microsoft/microsoft-graph-client');
 const UserRepository = require('./repository/UserRepository');
-const User = require('./models/User');
 
 
 class TicketBot extends TeamsActivityHandler {
@@ -45,7 +44,7 @@ class TicketBot extends TeamsActivityHandler {
                         console.log("Attachments: " + JSON.stringify(attachments));
                         const { conversationId, activityId } = await MessageService.sendToChannel(agentChannelId, ticketId, attachments);
                         await TicketRepository.saveTicket({
-                            ticketId: ticketId,
+                            id: ticketId,
                             requestChannelActivityId: message.id,
                             requestChannelConversationId: context.activity.conversation.id,
                             techChannelConversationId: conversationId,
@@ -63,7 +62,7 @@ class TicketBot extends TeamsActivityHandler {
                     if (await isRequesterChannel(context.activity.channelData.channel.id)) {
                         // Reply message posted in the requester channel
                         console.log("Message from requester channel");
-                        ticket = await TicketRepository.findByRequesterChannelConversationId(context.activity.conversation.id);
+                        ticket = await TicketRepository.findByRequesterChannelConversationId(context.activity.conversation.id, "TEAMS");
                         const conversationId = ticket.techChannelConversationId;
                         
                         const userId = context.activity.from.aadObjectId;
@@ -83,7 +82,7 @@ class TicketBot extends TeamsActivityHandler {
                         }
                     } else {
                         // Reply message posted in the technician channel
-                        ticket = await TicketRepository.findByTechChannelConversationId(context.activity.conversation.id);
+                        ticket = await TicketRepository.findByTechChannelConversationId(context.activity.conversation.id, "TEAMS");
                         const conversationId = ticket.requestChannelConversationId;
 
                         const userId = context.activity.from.aadObjectId;
@@ -103,9 +102,9 @@ class TicketBot extends TeamsActivityHandler {
                         }
                     }
                     console.log("inside parentMessageId");
-                    console.log("TicketId: " + ticket.ticketId)
+                    console.log("TicketId: " + ticket.id)
                     const user = await UserRepository.findByTeamsObjectId(context.activity.from.aadObjectId);
-                    const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
+                    const replyResponse = await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.id}/reply`, {
                         message: context.activity.text,
                         email: user.email
                     }, { headers: { 'Content-Type': 'application/json' } });
@@ -214,10 +213,12 @@ class TicketBot extends TeamsActivityHandler {
 
             if (context.activity.value && context.activity.value.action.verb === 'createGroup') {
                 const ticketId = context.activity.value.action.data.ticketId;
+                console.log(JSON.stringify(context.activity));
                 console.log(`Creating group for ticket from invoke handler: ${ticketId}`);
 
                 try {
                     const ticket = await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)
+                    console.log(JSON.stringify(ticketId));
                     const requesterEmail = ticket.data.email;
                     const technicianEmail = ticket.data.technician;
                     await GroupChatService.initiateGroupChat(requesterEmail, technicianEmail, ticketId);
@@ -521,7 +522,7 @@ class TicketBot extends TeamsActivityHandler {
 
         }
         else if (submittedData.action === 'assignTechnician') {
-            const ticket = await TicketRepository.findByTicketId(submittedData.ticketId);
+            const ticket = await TicketRepository.findById(submittedData.ticketId);
             if (!ticket) {
                 await context.sendActivity(`Ticket not found.`);
             }
@@ -529,7 +530,7 @@ class TicketBot extends TeamsActivityHandler {
             const selectedTechnician = JSON.parse(submittedData.selectedTechnician);
             const technicianName = selectedTechnician.name;
             const technicianEmail = selectedTechnician.email;
-            const ticketId = ticket.ticketId;
+            const ticketId = ticket.id;
             console.log("submittedData" + JSON.stringify(submittedData));
             await axios.post(`${process.env.BackEndBaseUrl}/update-ticket`, {
                 ticketId: submittedData.ticketId,

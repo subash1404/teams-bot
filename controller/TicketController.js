@@ -14,7 +14,7 @@ async function handleIncomingMessage(req, res) {
 async function syncReply(req, res) {
     const { ticketId, message, email } = req.body;
     try {
-        const ticket = await TicketRepository.findByTicketId(ticketId);
+        const ticket = await TicketRepository.findById(ticketId);
         await MessageService.sendTicketReply(ticket.requestChannelConversationId, ticketId, message, email);
         await MessageService.sendTicketReply(ticket.techChannelConversationId, ticketId, message, email);
         res.send(200, { success: true, message: 'Reply sent successfully!' });
@@ -27,7 +27,7 @@ async function syncReply(req, res) {
 async function updateTicket(req, res) {
     const { ticketId, subject, email } = req.body;
     try {
-        const ticket = await TicketRepository.findByTicketId(ticketId);
+        const ticket = await TicketRepository.findById(ticketId);
         ticket.body = subject || ticket.subject;
         const technician = await UserRepository.findByEmail(email);
         ticket.technicianId = technician.id;

@@ -1,7 +1,11 @@
-const { User } = require('../models')
+const User = require('../models/User')
 class UserRepository {
     async findByEmail(email) {
         return await User.findOne({ where: { email } });
+    }
+
+    async findByUserId(userId) {
+        return await User.findOne({ where: { userId } });
     }
 
     async findByTeamsObjectId(teamsObjectId) {

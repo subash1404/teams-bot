@@ -1,28 +1,52 @@
-const { Ticket } = require('../models');
-
+const Ticket = require('../models/Ticket');
+const { Op } = require('sequelize');
 class TicketRepository {
     async saveTicket(ticketData) {
         return await Ticket.create(ticketData)
     }
 
-    async findByTicketId(ticketId) {
-        return await Ticket.findOne({ where: { ticketId } });
+    async findById(id) {
+        return await Ticket.findOne({ where: { id } });
     }
 
-    async findByRequesterChannelConversationId(requestChannelConversationId) {
-        return await Ticket.findOne({ where: { requestChannelConversationId } })
+    async findByRequesterChannelConversationId(requestChannelConversationId, source) {
+        if (source === "TEAMS") {
+            return await Ticket.findOne({ where: { requestChannelConversationId } })
+        }
+        const leftPart = requestChannelConversationId.split(".")[0];
+        return await Ticket.findOne({
+            where: {
+                requestChannelConversationId: {
+                    [Op.like]: `${leftPart}.%`,
+                }
+            },
+        });
     }
 
-    async findByTechChannelConversationId(techChannelConversationId) {
-        return await Ticket.findOne({ where: { techChannelConversationId } })
+    async findByTechChannelConversationId(techChannelConversationId, source) {
+        if (source === "TEAMS") {
+            return await Ticket.findOne({ where: { techChannelConversationId } })
+        }
+        const leftPart = techChannelConversationId.split(".")[0];
+        return await Ticket.findOne({
+            where: {
+                technicianChannelConversationId: {
+                    [Op.like]: `${leftPart}%`,
+                },
+            },
+        });
     }
 
     async findByPrivateChannelConversationId(privateChannelConversationId) {
         return await Ticket.findOne({ where: { privateChannelConversationId } })
     }
 
-    async updateTicket(ticketId, updateData) {
-        const ticket = await Ticket.findOne({ where: { ticketId } });
+    async findByPrivateChannelId(privateChannelId) {
+        return await Ticket.findOne({ where: { privateChannelId } })
+    }
+
+    async updateTicket(id, updateData) {
+        const ticket = await Ticket.findOne({ where: { id } });
 
         if (!ticket) {
             throw new Error(`Ticket with ID ${ticketId} not found`);

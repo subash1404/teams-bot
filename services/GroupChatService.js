@@ -66,8 +66,8 @@ class GroupChatService {
         console.log("Before saving conversation for group chat");
         const ticket = await TicketRepository.findByPrivateChannelConversationId(conversationId);
         const user = await UserRepository.findByTeamsObjectId(aadObjectId);
-        console.log("TicketId: " + ticket.ticketId)
-        await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.ticketId}/reply`, {
+        console.log("TicketId: " + ticket.id)
+        await axios.post(`${process.env.BackEndBaseUrl}/ticket/${ticket.id}/reply`, {
             message: message,
             email: user.email
         }, { headers: { 'Content-Type': 'application/json' } });

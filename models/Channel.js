@@ -1,7 +1,7 @@
 'use strict';
-const { Model } = require('sequelize');
+const { sequelize } = require('../config/db');
+const { DataTypes } = require('sequelize')
 
-module.exports = (sequelize, DataTypes) => {
   const Channel = sequelize.define('Channel', {
     id: {
       type: DataTypes.INTEGER,
@@ -34,5 +34,4 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: false
   });
 
-  return Channel;
-};
+  module.exports = Channel;

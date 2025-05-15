@@ -3,7 +3,7 @@ class CardService {
     async buildTechnicianTicketCard(ticketId, attachments) {
         console.log("Ticket ID inside createTicketCard: ", ticketId);
         const ticket = (await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)).data;
-
+        console.log("Ticket inside card updation: "+ JSON.stringify(ticket));
         // Create the base message with the adaptive card
         const message = {
             type: "message",
