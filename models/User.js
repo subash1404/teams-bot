@@ -31,7 +31,7 @@ const { DataTypes } = require('sequelize')
       allowNull: true
     }
   }, {
-    tableName: 'User',
+    tableName: 'ImUser',
     timestamps: false
   });
 
