@@ -1,6 +1,6 @@
 const jsonParserService = require("./jsonParserService");
 
-async function getTakeActionBlock(ticketId) {
+async function getTakeActionBlock(ticketId, channelId) {
   const takeActionBlock = [
     {
       type: "section",
@@ -19,7 +19,7 @@ async function getTakeActionBlock(ticketId) {
             text: "Add Note",
           },
           action_id: "add_note",
-          value: ticketId.toString(),
+          value: JSON.stringify({ticketId, channelId}),
         },
         {
           type: "button",
@@ -28,7 +28,7 @@ async function getTakeActionBlock(ticketId) {
             text: "Initiate Approval",
           },
           action_id: "initiate_approval",
-          value: ticketId.toString(),
+          value: JSON.stringify({ticketId, channelId}),
         },
         {
           type: "button",
@@ -37,7 +37,7 @@ async function getTakeActionBlock(ticketId) {
             text: "Update Ticket",
           },
           action_id: "update_ticket",
-          value: ticketId.toString(),
+          value: JSON.stringify({ticketId, channelId}),
         },
       ],
     },
@@ -73,7 +73,7 @@ async function getAssignTicketBlock(ticketId) {
           type: "button",
           text: {
             type: "plain_text",
-            text: "Assign to Me",
+            text: "Pick Up",
           },
           action_id: "assign_to_me",
           value: ticketId.toString(),
@@ -82,7 +82,7 @@ async function getAssignTicketBlock(ticketId) {
           type: "button",
           text: {
             type: "plain_text",
-            text: "Assign to Anyone",
+            text: "Assign",
           },
           action_id: "assign_to_others",
           value: ticketId.toString(),
@@ -157,7 +157,8 @@ async function getTicketChannelBlock(
   ticket,
   ticketInfo,
   requesterName,
-  technicianName
+  technicianName,
+  channelId
 ) {
   const createdAt = await jsonParserService.formatCreatedDate(
     ticketInfo.data.createdAt
@@ -187,7 +188,7 @@ async function getTicketChannelBlock(
             text: "Private Group",
           },
           action_id: "add_members",
-          value: ticket.id.toString(),
+          value: JSON.stringify({ ticketId: ticket.id, channelId }),
         },
         {
           type: "button",
@@ -196,7 +197,7 @@ async function getTicketChannelBlock(
             text: "Take Action",
           },
           action_id: "take_action_expand",
-          value: ticket.id.toString(),
+          value: JSON.stringify({ ticketId: ticket.id, channelId }),
         },
         {
           type: "button",
@@ -205,7 +206,7 @@ async function getTicketChannelBlock(
             text: "Assign Ticket",
           },
           action_id: "assign_ticket_expand",
-          value: ticket.id.toString(),
+          value: JSON.stringify({ ticketId: ticket.id, channelId }),
         },
       ],
     },
@@ -403,6 +404,121 @@ async function getInitiateApprovalMessageBlock(
   return initiateApprovalMessageBlock;
 }
 
+async function getPublicChannelBlock(ticketInfo, technicianName) {
+  const createdAt = await jsonParserService.formatCreatedDate(
+    ticketInfo.data.createdAt
+  );
+  const ticketInfoBlock = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*New Ticket created with ID:* ${ticketInfo.data.id}\n${ticketInfo.data.subject}`,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Status:* ${ticketInfo.data.status}\n*Assigned To:* ${
+          technicianName ?? "Unassigned"
+        }\n*Created Date:* ${createdAt}`,
+      },
+    },
+  ];
+
+  return ticketInfoBlock;
+}
+
+async function getTicketInfoBlock(ticketInfo, technicianName) {
+  const createdAt = await jsonParserService.formatCreatedDate(
+    ticketInfo.data.createdAt
+  );
+  const ticketInfoBlock = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Ticket ID:* ${ticketInfo.data.id}\n *Subject:* ${ticketInfo.data.subject}`,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Status:* ${ticketInfo.data.status}\n*Assigned To:* ${
+          technicianName ?? "Unassigned"
+        }\n*Created Date:* ${createdAt}`,
+      },
+    },
+  ];
+
+  return ticketInfoBlock;
+}
+
+async function getAcknowledgementBlock(message) {
+  return {
+    type: "modal",
+    // title: {
+    //   type: "plain_text",
+    //   text: "Assignment",
+    // },
+    close: {
+      type: "plain_text",
+      text: "Close",
+    },
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: message,
+        },
+      },
+    ],
+  };
+}
+
+async function getAddNoteBlock(ticketId, channelId) {
+  const noteBlock = {
+    type: "modal",
+    callback_id: "submit_note",
+    title: {
+      type: "plain_text",
+      text: "Add Note",
+    },
+    submit: {
+      type: "plain_text",
+      text: "Submit",
+    },
+    close: {
+      type: "plain_text",
+      text: "Cancel",
+    },
+    private_metadata: JSON.stringify({ticketId, channelId}),
+    blocks: [
+      {
+        type: "input",
+        block_id: "note_input_block",
+        element: {
+          type: "plain_text_input",
+          multiline: true,
+          action_id: "note_input",
+          placeholder: {
+            type: "plain_text",
+            text: "Enter your note here...",
+          },
+        },
+        label: {
+          type: "plain_text",
+          text: "Note",
+        },
+      },
+    ],
+  };
+  return noteBlock;
+}
+
 function capitalize(string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 }
@@ -414,5 +530,9 @@ module.exports = {
   getTicketChannelBlock,
   getUpdateTicketBlock,
   getInitiateApprovalRequestBlock,
-  getInitiateApprovalMessageBlock
+  getInitiateApprovalMessageBlock,
+  getTicketInfoBlock,
+  getAcknowledgementBlock,
+  getPublicChannelBlock,
+  getAddNoteBlock
 };

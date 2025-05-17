@@ -1,9 +1,17 @@
 const axios = require("axios");
 const ticketRepository = require("../../repository/TicketRepository");
 const userRepository = require("../../repository/UserRepository");
+const blockService = require("./blockService");
+const jsonParserService = require("./jsonParserService");
+const outgoingService = require("./outgoingService");
 
 async function createPrivateChannel(ticketId) {
   try {
+    const ticket = await ticketRepository.findById(ticketId);
+    if(ticket.privateChannelId) {
+      console.log("Already a private channel Created for this ticket");
+      
+    }
     const ticketInfo = await axios.get(
       `http://localhost:8081/tickets/${ticketId}`
     );
@@ -17,12 +25,21 @@ async function createPrivateChannel(ticketId) {
     const channelName = `ticket-${ticketId}`;
     const channelId = await createChannel(channelName);
     if (channelId) {
-      const ticket = await ticketRepository.findById(ticketId);
       const requester = await userRepository.findByEmail(ticketInfo.data.email);
       await addUsersToChannel(channelId, [requester.userId, technician.userId]);
       await addBotToChannel(channelId);
       ticket.privateChannelId = channelId;
       await ticketRepository.saveTicket(ticket);
+      const blocks = await blockService.getTicketInfoBlock(ticketInfo, technician.name);
+      const response = await outgoingService.postBlockMessage(
+        channelId,
+        blocks,
+        null,
+        process.env.BOT_ACCESS_TOKEN
+      );
+      const privateChannelBlockConversationId = await jsonParserService.extractThreadTs(response);
+      ticket.privateChannelBlockConversationId = privateChannelBlockConversationId;
+      ticketRepository.saveTicket(ticket);
     } else {
       console.error(`Failed to create private channel for ticket ${ticketId}`);
     }

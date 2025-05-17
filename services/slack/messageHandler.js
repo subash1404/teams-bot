@@ -2,7 +2,7 @@ const ticketRepository = require("../../repository/TicketRepository");
 const userRepository = require("../../repository/UserRepository");
 const outgoingService = require("./outgoingService");
 const agentChannelService = require("./agentChannelService");
-const slackService = require("./slackService");
+const blockService = require("./blockService")
 const jsonParserService = require("./jsonParserService");
 const axios = require("axios");
 
@@ -105,7 +105,7 @@ async function handleNewMessage(userId, channelId, messageText, eventTs) {
     requestChannelConversationId: eventTs,
   });
   const requesterChannelBlocks =
-    await slackService.getRequesterChannelTicketCardBlock(ticket, ticketInfo);
+    await blockService.getPublicChannelBlock(ticketInfo, null);
   const response = await outgoingService.postBlockMessage(
     channelId,
     requesterChannelBlocks,

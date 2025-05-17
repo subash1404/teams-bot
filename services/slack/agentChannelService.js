@@ -46,7 +46,7 @@ async function getOrCreateTicketThreadInChannel(ticket, channelId, ticketInfo) {
   if (ticket.techChannelConversationId)
     return ticket.techChannelConversationId;
   const requester = await userRepository.findByEmail(ticketInfo.data.email);
-  const technicianChannelCard = await blockService.getTicketChannelBlock(ticket, ticketInfo, requester.name, null);
+  const technicianChannelCard = await blockService.getTicketChannelBlock(ticket, ticketInfo, requester.name, null, channelId);
   const response = await outgoingService.postBlockMessage(
     channelId,
     technicianChannelCard,

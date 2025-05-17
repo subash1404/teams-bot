@@ -39,9 +39,11 @@ async function handleInteraction(payload) {
           break;
 
         case "take_action_expand":
+          const value = JSON.parse(action.value);
           await slackService.openTakeActionCard(
             payload.trigger_id,
-            action.value
+            value.ticketId,
+            value.channelId
           );
           break;
 
@@ -53,7 +55,12 @@ async function handleInteraction(payload) {
           break;
 
         case "add_note":
-          await slackService.openAddNoteCard(payload.trigger_id, action.value);
+          const noteValue = JSON.parse(action.value);
+          await slackService.openAddNoteCard(
+            payload.trigger_id,
+            noteValue.ticketId,
+            noteValue.channelId
+          );
           break;
 
         case "assign_to_me":
@@ -62,7 +69,8 @@ async function handleInteraction(payload) {
             action.value,
             user.email,
             null,
-            null
+            null,
+            payload.trigger_id
           );
           break;
 
@@ -109,13 +117,17 @@ async function handleInteraction(payload) {
           break;
 
         case "submit_note":
-          const noteText =
-            payload.view.state.values.note_input_block.note_input.value;
-          console.log("Note for Ticket", ticketId, "=>", noteText);
-          await axios.post(`http://localhost:8081/ticket/${ticketId}/notes`, {
-            note: noteText,
-          });
-          break;
+          try {
+            const noteText =
+              payload.view.state.values.note_input_block.note_input.value;
+            console.log("Note for Ticket", ticketId, "=>", noteText);
+
+            await axios.post(`http://localhost:8081/ticket/${ticketId}/notes`, {
+              note: noteText,
+            });
+          } catch (error) {
+            console.error("Error saving note:", error);
+          }
 
         case "more_info_submit":
           const infoText =
@@ -124,8 +136,12 @@ async function handleInteraction(payload) {
           break;
       }
     }
+    return;
   } catch (err) {
     console.error("Error handling Slack interaction:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Internal Server Error");
+    }
   }
 }
 
