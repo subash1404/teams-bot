@@ -11,7 +11,7 @@ const processPayload = async (payload, res) => {
     const eventNode = payload.event;
 
     if (eventNode && eventNode.type === "message") {
-      if (eventNode.bot_id || eventNode.subtype) {
+      if (eventNode.bot_id) {
         return;
       }
 
@@ -49,7 +49,7 @@ const processPayload = async (payload, res) => {
         }
 
         if (imChannel && ticket) {
-          messageHandler.handleTechnicianChannelMessage(userId, ticket, imChannel, messageText)
+          await messageHandler.handleTechnicianChannelMessage(userId, ticket, imChannel, messageText, eventNode.files)
           return;
         }
         const ticketByChannel = await ticketRepository.findByPrivateChannelId(
@@ -68,14 +68,16 @@ const processPayload = async (payload, res) => {
             channelId,
             messageText,
             threadTs,
-            teamId
+            teamId,
+            eventNode.files
           );
         } else {
           await messageHandler.handleNewMessage(
             userId,
             channelId,
             messageText,
-            eventTs
+            eventTs,
+            eventNode.files
           );
         }
       });

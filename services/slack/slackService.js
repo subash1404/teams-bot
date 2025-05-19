@@ -35,8 +35,8 @@ async function replyMessage(ticketId, message, email) {
   );
 }
 
-async function openTakeActionCard(triggerId, ticketId, channelId) {
-  const takeActionCardBlocks = await blockService.getTakeActionBlock(ticketId, channelId);
+async function openTakeActionCard(triggerId, ticketId) {
+  const takeActionCardBlocks = await blockService.getTakeActionBlock(ticketId);
   await axios.post(
     "https://slack.com/api/views.open",
     { trigger_id: triggerId, view: takeActionCardBlocks },
@@ -138,8 +138,8 @@ async function openAssignTicketCard(triggerId, ticketId) {
   );
 }
 
-async function openAddNoteCard(triggerId, ticketId, channelId) {
-  const noteBlock = await blockService.getAddNoteBlock(ticketId, channelId);
+async function openAddNoteCard(triggerId, ticketId) {
+  const noteBlock = await blockService.getAddNoteBlock(ticketId);
 
   try {
     const response = await axios.post(
@@ -213,7 +213,8 @@ async function updateChannelCards(ticket, ticketInfo) {
 }
 
 async function handleApproverAction(payload) {
-  const ticketId = payload.actions[0].value;
+  const value = JSON.parse(payload.actions[0].value);
+  const ticketId = value.ticketId;
   const userId = payload.user.id;
   const actionId = payload.actions[0].action_id;
 

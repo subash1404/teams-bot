@@ -4,8 +4,9 @@ const jsonParserService = require("./jsonParserService");
 const userRepository = require("../../repository/UserRepository");
 const mirroredMessages = new Map();
 const blockService = require('./blockService');
+const attachmentHandlerService = require('./attachmentHandlerService');
 
-async function sendMessageToAgentChannel(ticket, userId, messageText, ticketInfo) {
+async function sendMessageToAgentChannel(ticket, userId, messageText, ticketInfo, files) {
   try {
     const imChannelPublicToPrivate =
       await imChannelPublicToPrivateRepository.findByPublicChannelId(
@@ -29,6 +30,11 @@ async function sendMessageToAgentChannel(ticket, userId, messageText, ticketInfo
       ticketThreadTs,
       process.env.BOT_ACCESS_TOKEN
     );
+
+    if(files) {
+      const threadTs = await jsonParserService.extractThreadTs(response);
+      await attachmentHandlerService.handleAttachments(files, threadTs, imChannelPublicToPrivate.privateChannelId);
+    }
     console.log(
       `Response in Agent channel : ${response.ts} Message : ${messageText}`
     );

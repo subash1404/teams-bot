@@ -20,6 +20,7 @@
         "async-mutex": "^0.5.0",
         "botbuilder": "~4.23.0",
         "dotenv": "^8.2.0",
+        "form-data": "^4.0.2",
         "mysql2": "^3.14.0",
         "restify": "~10.0.0",
         "restify-router": "^0.6.2",

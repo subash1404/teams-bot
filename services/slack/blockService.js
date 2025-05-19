@@ -1,6 +1,6 @@
 const jsonParserService = require("./jsonParserService");
 
-async function getTakeActionBlock(ticketId, channelId) {
+async function getTakeActionBlock(ticketId) {
   const takeActionBlock = [
     {
       type: "section",
@@ -19,7 +19,7 @@ async function getTakeActionBlock(ticketId, channelId) {
             text: "Add Note",
           },
           action_id: "add_note",
-          value: JSON.stringify({ticketId, channelId}),
+          value: JSON.stringify({ ticketId }),
         },
         {
           type: "button",
@@ -28,7 +28,7 @@ async function getTakeActionBlock(ticketId, channelId) {
             text: "Initiate Approval",
           },
           action_id: "initiate_approval",
-          value: JSON.stringify({ticketId, channelId}),
+          value: JSON.stringify({ ticketId }),
         },
         {
           type: "button",
@@ -37,7 +37,7 @@ async function getTakeActionBlock(ticketId, channelId) {
             text: "Update Ticket",
           },
           action_id: "update_ticket",
-          value: JSON.stringify({ticketId, channelId}),
+          value: JSON.stringify({ ticketId }),
         },
       ],
     },
@@ -76,7 +76,7 @@ async function getAssignTicketBlock(ticketId) {
             text: "Pick Up",
           },
           action_id: "assign_to_me",
-          value: ticketId.toString(),
+          value: JSON.stringify({ ticketId }),
         },
         {
           type: "button",
@@ -85,7 +85,7 @@ async function getAssignTicketBlock(ticketId) {
             text: "Assign",
           },
           action_id: "assign_to_others",
-          value: ticketId.toString(),
+          value: JSON.stringify({ ticketId }),
         },
       ],
     },
@@ -188,7 +188,7 @@ async function getTicketChannelBlock(
             text: "Private Group",
           },
           action_id: "add_members",
-          value: JSON.stringify({ ticketId: ticket.id, channelId }),
+          value: JSON.stringify({ ticketId: ticket.id }),
         },
         {
           type: "button",
@@ -197,7 +197,7 @@ async function getTicketChannelBlock(
             text: "Take Action",
           },
           action_id: "take_action_expand",
-          value: JSON.stringify({ ticketId: ticket.id, channelId }),
+          value: JSON.stringify({ ticketId: ticket.id }),
         },
         {
           type: "button",
@@ -206,7 +206,7 @@ async function getTicketChannelBlock(
             text: "Assign Ticket",
           },
           action_id: "assign_ticket_expand",
-          value: JSON.stringify({ ticketId: ticket.id, channelId }),
+          value: JSON.stringify({ ticketId: ticket.id }),
         },
       ],
     },
@@ -381,20 +381,20 @@ async function getInitiateApprovalMessageBlock(
             text: { type: "plain_text", text: "Approve" },
             action_id: "approve_ticket",
             style: "primary",
-            value: ticketId,
+            value: JSON.stringify({ ticketId })
           },
           {
             type: "button",
             text: { type: "plain_text", text: "Reject" },
             action_id: "reject_ticket",
             style: "danger",
-            value: ticketId,
+            value: JSON.stringify({ ticketId })
           },
           {
             type: "button",
             text: { type: "plain_text", text: "More Info" },
             action_id: "more_info",
-            value: ticketId,
+            value: JSON.stringify({ ticketId })
           },
         ],
       },
@@ -479,7 +479,7 @@ async function getAcknowledgementBlock(message) {
   };
 }
 
-async function getAddNoteBlock(ticketId, channelId) {
+async function getAddNoteBlock(ticketId) {
   const noteBlock = {
     type: "modal",
     callback_id: "submit_note",
@@ -495,7 +495,7 @@ async function getAddNoteBlock(ticketId, channelId) {
       type: "plain_text",
       text: "Cancel",
     },
-    private_metadata: JSON.stringify({ticketId, channelId}),
+    private_metadata: JSON.stringify({ ticketId }),
     blocks: [
       {
         type: "input",
@@ -534,5 +534,5 @@ module.exports = {
   getTicketInfoBlock,
   getAcknowledgementBlock,
   getPublicChannelBlock,
-  getAddNoteBlock
+  getAddNoteBlock,
 };

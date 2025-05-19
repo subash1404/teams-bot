@@ -17,56 +17,53 @@ async function handleInteraction(payload) {
       }
 
       const action = actions[0];
+      const value = JSON.parse(action.value);
       switch (action.action_id) {
         case "add_members":
           await slackPrivateChannelService
-            .createPrivateChannel(action.value)
+            .createPrivateChannel(value.ticketId)
             .catch((err) => console.error("Failed to create channel", err));
           break;
 
         case "update_ticket":
           await slackService.openUpdateTicketCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "initiate_approval":
           await slackService.openInitiateApprovalRequestCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "take_action_expand":
-          const value = JSON.parse(action.value);
           await slackService.openTakeActionCard(
             payload.trigger_id,
-            value.ticketId,
-            value.channelId
+            value.ticketId
           );
           break;
 
         case "assign_ticket_expand":
           await slackService.openAssignTicketCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "add_note":
-          const noteValue = JSON.parse(action.value);
           await slackService.openAddNoteCard(
             payload.trigger_id,
-            noteValue.ticketId,
-            noteValue.channelId
+            value.ticketId
           );
           break;
 
         case "assign_to_me":
           const user = await userRepository.findByUserId(payload.user.id);
           await ticketService.updateTicket(
-            action.value,
+            value.ticketId,
             user.email,
             null,
             null,
@@ -77,7 +74,7 @@ async function handleInteraction(payload) {
         case "assign_to_others":
           await slackService.openTechnicianCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
@@ -128,6 +125,7 @@ async function handleInteraction(payload) {
           } catch (error) {
             console.error("Error saving note:", error);
           }
+          break;
 
         case "more_info_submit":
           const infoText =
