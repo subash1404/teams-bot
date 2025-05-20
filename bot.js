@@ -27,6 +27,7 @@ class TicketBot extends TeamsActivityHandler {
 
 
         this.onMessage(async (context, next) => {
+            console.log("Inside onMessage 1");
             console.log("Inside onMessage");
             console.log("context: " + JSON.stringify(context.activity));
             const conversation = context.activity.conversation;
@@ -65,7 +66,7 @@ class TicketBot extends TeamsActivityHandler {
                         console.log("Message from requester channel");
                         ticket = await TicketRepository.findByRequesterChannelConversationId(context.activity.conversation.id, "TEAMS");
                         const conversationId = ticket.techChannelConversationId;
-                        
+
                         const userId = context.activity.from.aadObjectId;
                         const userName = context.activity.from.name;
                         const messageText = context.activity.text;
@@ -145,6 +146,8 @@ class TicketBot extends TeamsActivityHandler {
                 await next();
             }
         });
+
+
     }
 
     async onConversationUpdateActivity(context) {
@@ -157,7 +160,7 @@ class TicketBot extends TeamsActivityHandler {
             }
         }
     }
-    
+
     // TODO: Move this to userService
     async getUserProfilePhotoBase64(email, accessToken) {
         try {
@@ -198,9 +201,26 @@ class TicketBot extends TeamsActivityHandler {
         console.log("After card updation")
     }
 
+    getSubcategoriesForCategory(category) {
+        if (category === 'hardware') {
+            return [
+                { title: 'Laptop', value: 'laptop' },
+                { title: 'Monitor', value: 'monitor' }
+            ];
+        }
+        if (category === 'software') {
+            return [
+                { title: 'OS Issue', value: 'os' },
+                { title: 'Installation', value: 'install' }
+            ];
+        }
+        return [];
+    }
+
+
     async onInvokeActivity(context) {
         console.log(`Invoke activity received: ${context.activity.name}`);
-
+        console.log("Invoke activity received: " + JSON.stringify(context.activity));
         if (context.activity.name === 'application/search' && context.activity.value?.dataset === 'subcategories') {
             const data = context.activity.value.data;
             const category = data?.category?.toLowerCase();
@@ -232,17 +252,44 @@ class TicketBot extends TeamsActivityHandler {
         if (context.activity.name === 'adaptiveCard/action') {
             console.log('Adaptive card action data:', JSON.stringify(context.activity.value, null, 2));
 
+            if (context.activity.name === 'adaptiveCard/action') {
+                const verb = context.activity.value.verb;
+
+                if (verb === 'refreshFields') {
+                    const selectedCategory = context.activity.value.data.category;
+
+                    // Based on category, fetch subcategories
+                    const subcategories = this.getSubcategoriesForCategory(selectedCategory); // return array of {title, value}
+
+                    const updatedCard = buildCardWithFields({
+                        category: selectedCategory,
+                        subcategory: "",
+                        subcategories: subcategories
+                    });
+
+                    return res.send({
+                        statusCode: 200,
+                        type: 'application/vnd.microsoft.card.adaptive',
+                        value: updatedCard
+                    });
+                }
+            }
+
             if (context.activity.value && context.activity.value.action.verb === 'createGroup') {
+                console.log("Context inside createGroup: " + JSON.stringify(context.activity));
                 const ticketId = context.activity.value.action.data.ticketId;
                 console.log(JSON.stringify(context.activity));
                 console.log(`Creating group for ticket from invoke handler: ${ticketId}`);
-
                 try {
                     const ticket = await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)
                     console.log(JSON.stringify(ticketId));
-                    const requesterEmail = ticket.data.email;
-                    const technicianEmail = ticket.data.technician;
-                    await GroupChatService.initiateGroupChat(requesterEmail, technicianEmail, ticketId);
+                    var emails = [];
+                    const initiater = await UserRepository.findByTeamsObjectId(context.activity.from.aadObjectId);
+                    // if (initiater.email != ticket.data.technician) {
+                    //     emails.push(initiater.email);
+                    // }
+                    emails.push(ticket.data.email, ticket.data.technician);
+                    await GroupChatService.initiateGroupChat(emails, ticketId);
                     await context.sendActivity(`✅ Group created successfully!`);
                 } catch (error) {
                     console.error("Error creating group chat:", error);
@@ -273,7 +320,6 @@ class TicketBot extends TeamsActivityHandler {
                 console.log("Ticket rejected successfully");
                 return { status: 200 };
             }
-
         }
         return await super.onInvokeActivity(context);
     }
@@ -299,7 +345,7 @@ class TicketBot extends TeamsActivityHandler {
 
             const siteId = "superopsinc1.sharepoint.com,344677b1-936a-446e-834a-6555914e2131,8ae85b51-3890-471c-b31e-3d08de68cbaf";
             const ChannelName = "It-help";
-            console.log("Attachment message: " +JSON.stringify(message.subject))
+            console.log("Attachment message: " + JSON.stringify(message.subject))
 
             if (message.attachments && message.attachments.length > 0) {
                 console.log(`Message has ${message.attachments.length} attachments.`);
@@ -417,7 +463,7 @@ class TicketBot extends TeamsActivityHandler {
 
     async handleTeamsTaskModuleFetch(context, taskModuleRequest) {
         console.log("Inside handleTeamsTaskModuleFetch")
-        const cardTaskFetchValue = taskModuleRequest.data.data;
+        const cardTaskFetchValue = taskModuleRequest.data.action;
         const taskInfo = {};
 
         console.log("cardTaskFetchValue: " + cardTaskFetchValue)
@@ -440,49 +486,110 @@ class TicketBot extends TeamsActivityHandler {
         else if (cardTaskFetchValue === 'techAssign') {
             console.log('data: ' + JSON.stringify(taskModuleRequest.data));
             const cardJson = await CardService.buildTechnicianAssignmentCard(taskModuleRequest.data.ticketId);
-            const adaptiveCard = CardFactory.adaptiveCard(cardJson);
-            taskInfo.card = adaptiveCard;
-            this.setTaskInfo(taskInfo, {
-                height: 'medium',
-                width: 'medium',
-                title: 'initiate chat'
-            });
-        } else if (cardTaskFetchValue === 'updateTicket') {
-            const ticketId = taskModuleRequest.data.ticketId;
-
-            // Fetch editable fields from your Helpdesk backend
-            const response = await fetch(`${process.env.BackEndBaseUrl}/ticket/${ticketId}/fields`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Assign Technician',
+                        height: 'medium',
+                        width: 'medium',
+                        card: CardFactory.adaptiveCard(cardJson)
+                    }
                 }
-            });
+            };
+        } else if (cardTaskFetchValue === 'moreinfo') {
+            const cardJson = await CardService.buildMoreInfoCard(taskModuleRequest.data.ticketId);
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Assign Technician',
+                        height: 'medium',
+                        width: 'medium',
+                        card: cardJson
+                    }
+                }
+            };
+        } else if (cardTaskFetchValue === 'initiateConversation') {
+            const cardJson = await CardService.buildMoreInfoCard(taskModuleRequest.data.ticketId);
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Assign Technician',
+                        height: 'medium',
+                        width: 'medium',
+                        card: cardJson
+                    }
+                }
+            };
+        } else if (cardTaskFetchValue === 'initiateApproval') {
+            const cardJson = await CardService.buildSendApprovalCard(taskModuleRequest.data.ticketId);
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Assign Technician',
+                        height: 'medium',
+                        width: 'medium',
+                        card: cardJson
+                    }
+                }
+            };
+        } else if (cardTaskFetchValue === 'updateTicket') {
+            const categoryChoices = [
+                { title: "Hardware", value: "hardware" },
+                { title: "Software", value: "software" }
+            ];
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch editable fields for ticket ${ticketId}`);
-            }
+            //   const subcategoryMap = {
+            //     hardware: [
+            //       { title: "Laptop", value: "laptop" },
+            //       { title: "Printer", value: "printer" }
+            //     ],
+            //     software: [
+            //       { title: "OS", value: "os" },
+            //       { title: "IDE", value: "ide" }
+            //     ]
+            //   };
+            const subcategoryMap = {};
 
-            const editableFields = await response.json();
-
-            this.subcategoriesMap = editableFields.find(f => f.name === 'subcategories')?.value || {};
-
-            taskInfo.card = this.createUpdateTicketCard(editableFields, ticketId);
+            // const adaptiveCard = buildCard({
+            //     categoryChoices,
+            //     subcategoryMap,
+            //     selectedCategory: "",
+            //     selectedSubcategory: ""
+            // });
 
             this.setTaskInfo(taskInfo, {
                 height: 'medium',
                 width: 'medium',
                 title: 'Update Ticket'
             });
+            const cardJson = await this.createUpdateTicketCard({
+                categoryChoices,
+                subcategoryMap,
+                selectedCategory: "",
+                selectedSubcategory: ""
+            });
+            console.log("Before setting card");
+            return {
+                task: {
+                    type: 'continue',
+                    value: {
+                        title: 'Assign Technician',
+                        height: 'medium',
+                        width: 'medium',
+                        card: cardJson
+                    }
+                }
+            };   
         }
-        return {
-            task: {
-                type: 'continue',
-                value: taskInfo
-            }
-        };
     }
 
     async handleTeamsTaskModuleSubmit(context, taskModuleRequest) {
+        console.log("Inside handleTeamsTaskModuleSubmit");
+        console.log("Submit context: " + JSON.stringify(context.activity));
         const submittedData = taskModuleRequest.data;
         console.log(taskModuleRequest.data.selectedUsers)
 
@@ -503,15 +610,44 @@ class TicketBot extends TeamsActivityHandler {
                 });
 
                 await context.sendActivity(`📝 Note added to Ticket #${ticketId} successfully!`);
+                const cardJson = await CardService.buildOtherTechnicianAssignmentCard(ticketId);
+
+                // return {
+                //     task: {
+                //         type: 'continue',
+                //         value: {
+                //             title: 'Updated Modal Title',
+                //             height: 'medium',
+                //             width: 'medium',
+                //             card: cardJson
+                //         }
+                //     }
+                // };
                 return null;
             } catch (error) {
                 console.error(error);
                 await context.sendActivity(`❌ Failed to add note to Ticket #${ticketId}`);
             }
-
-            return { task: { type: 'message', value: 'Note submitted successfully.' } };
-        }
-        else if (submittedData.action === 'submitUpdatedTicket') {
+        } else if (context.activity.value && context.activity.value.data.action === 'assignToMe') {
+            const ticketId = submittedData.ticketId;
+            const user = await UserRepository.findByTeamsObjectId(context.activity.from.aadObjectId);
+            const ticket = await TicketRepository.findById(ticketId);
+            if (!ticket) {
+                await context.sendActivity(`Ticket not found.`);
+            }
+            await axios.post(`${process.env.BackEndBaseUrl}/update-ticket`, {
+                ticketId: ticketId,
+                technician: user.email
+            }, { headers: { 'Content-Type': 'application/json' } });
+            const requesterCard = await CardService.buildRequesterTicketCard(ticketId);
+            const technicianCard = await CardService.buildTechnicianTicketCard(ticketId);
+            console.log("Before card updation");
+            await this.updateCard(ticket.techChannelConversationId, ticket.techChannelActivityId, technicianCard);
+            await this.updateCard(ticket.requestChannelConversationId, ticket.requestChannelActivityId, requesterCard);
+            console.log("Ater card updation");
+            await context.sendActivity(`Technician ${user.name} has been assigned to the ticket.`)
+            return null;
+        } else if (submittedData.action === 'submitUpdatedTicket') {
             console.log('Updating ticket:', submittedData);
 
             const updatePayload = {
@@ -565,8 +701,46 @@ class TicketBot extends TeamsActivityHandler {
             await context.sendActivity(`Technician ${technicianName} has been assigned to the ticket.`)
 
             return null;
-        } else if (submittedData.action === 'cancelTicket') {
+        } else if (submittedData.action === 'cancel') {
             return null;
+        } else if (submittedData.action === 'openTechList') {
+            const ticketId = submittedData.ticketId;
+            try {
+                const cardJson = await CardService.buildOtherTechnicianAssignmentCard(ticketId);
+                return {
+                    task: {
+                        type: 'continue',
+                        value: {
+                            title: 'Select Technician',
+                            height: 'large',
+                            width: 'medium',
+                            card: CardFactory.adaptiveCard(cardJson)
+                        }
+                    }
+                };
+            } catch (err) {
+                console.error("Error in tech assign:", err);
+                return {
+                    status: 500,
+                    body: {
+                        error: "Failed to generate card"
+                    }
+                };
+            }
+        } else if (submittedData.action === 'submitMoreInfo') {
+            const ticketId = submittedData.ticketId;
+            const message = submittedData.messageText;
+            console.log("More info paylaod: " + ticketId + " : " + message);
+            // TODO - call conversation api for more info
+        } else if (submittedData.action === 'sendApprovalCard') {
+            const managers = submittedData.selectedManagers.split(',');
+            const message = submittedData.messageText;
+            const ticketId = submittedData.ticketId;
+            console.log(message);
+            await MessageService.sendApprovalCard(ticketId, message, managers);
+            console.log("Approval initiated successfully");
+            return null;
+            // TODO - call conversation api for more info
         }
     }
     setTaskInfo(taskInfo, uiSettings) {
@@ -608,98 +782,148 @@ class TicketBot extends TeamsActivityHandler {
         });
     }
 
-    createUpdateTicketCard(fields, ticketId) {
-        const cardBody = [
+    async createUpdateTicketCard({ categoryChoices, subcategoryMap, selectedCategory, selectedSubcategory }) {
+        const body = [
             {
-                type: 'TextBlock',
-                text: 'Update Ticket',
-                weight: 'Bolder',
-                size: 'Medium',
-                wrap: true
+                type: "Input.ChoiceSet",
+                id: "category",
+                label: "Category",
+                style: "compact",
+                value: selectedCategory,
+                choices: categoryChoices
             }
         ];
-
-        for (const field of fields) {
-            if (field.name === 'subcategories') continue;
-            cardBody.push({
-                type: 'TextBlock',
-                text: field.name.charAt(0).toUpperCase() + field.name.slice(1),
-                wrap: true
+    
+        // Dynamically show subcategories if category is selected
+        if (selectedCategory && subcategoryMap[selectedCategory]) {
+            body.push({
+                type: "Input.ChoiceSet",
+                id: "subcategory",
+                label: "Subcategory",
+                style: "compact",
+                value: selectedSubcategory,
+                choices: subcategoryMap[selectedCategory]
             });
-
-            if (field.type === 'text') {
-                cardBody.push({
-                    type: 'Input.Text',
-                    id: field.name,
-                    value: field.value || '',
-                    placeholder: `Enter ${field.name}`
-                });
-            } else if (field.type === 'dropdown') {
-                cardBody.push({
-                    type: 'Input.ChoiceSet',
-                    id: field.name,
-                    style: 'compact',
-                    value: field.value,
-                    choices: field.options.map(opt => ({
-                        title: opt.charAt(0).toUpperCase() + opt.slice(1),
-                        value: opt
-                    }))
-                });
-            } else if (field.type === 'category-dropdown') {
-                cardBody.push({
-                    type: 'Input.ChoiceSet',
-                    id: 'category',
-                    style: 'compact',
-                    value: field.value,
-                    choices: field.options.map(opt => ({
-                        title: opt,
-                        value: opt.toLowerCase()
-                    })),
-                    valueChangedAction: {
-                        type: 'Action.ResetInputs'
-                    }
-                });
-            } else if (field.type === 'subcategory-dropdown') {
-                cardBody.push({
-                    type: 'Input.ChoiceSet',
-                    id: 'subcategory',
-                    style: 'filtered',
-                    placeholder: 'Select subcategory',
-                    value: field.value,
-                    choices: [],
-                    'choices.data': {
-                        type: 'Data.Query',
-                        dataset: 'subcategories',
-                        associatedInputs: 'auto'
-                    }
-                });
-            }
         }
-
-        return CardFactory.adaptiveCard({
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: '1.5',
-            type: 'AdaptiveCard',
-            body: cardBody,
+    
+        return CardFactory.adaptiveCard ({
+            type: "AdaptiveCard",
+            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+            version: "1.5",
+            body,
             actions: [
                 {
-                    type: 'Action.Submit',
-                    title: 'Update',
+                    type: "Action.Submit",
+                    title: "Update Ticket",
                     data: {
-                        action: 'submitUpdatedTicket',
-                        ticketId: ticketId
-                    }
-                },
-                {
-                    type: 'Action.Submit',
-                    title: 'Cancel',
-                    data: {
-                        action: 'cancelTicket'
+                        action: "submitUpdate"
                     }
                 }
-            ]
+            ],
+            refresh: {
+                action: {
+                    type: "Action.Execute",
+                    verb: "refreshFields",
+                    data: {
+                        action: "refreshFields"
+                    }
+                }
+            }
         });
-    }
+    }    
+
+    // createUpdateTicketCard(fields, ticketId) {
+    //     const cardBody = [
+    //         {
+    //             type: 'TextBlock',
+    //             text: 'Update Ticket',
+    //             weight: 'Bolder',
+    //             size: 'Medium',
+    //             wrap: true
+    //         }
+    //     ];
+
+    //     for (const field of fields) {
+    //         if (field.name === 'subcategories') continue;
+    //         cardBody.push({
+    //             type: 'TextBlock',
+    //             text: field.name.charAt(0).toUpperCase() + field.name.slice(1),
+    //             wrap: true
+    //         });
+
+    //         if (field.type === 'text') {
+    //             cardBody.push({
+    //                 type: 'Input.Text',
+    //                 id: field.name,
+    //                 value: field.value || '',
+    //                 placeholder: `Enter ${field.name}`
+    //             });
+    //         } else if (field.type === 'dropdown') {
+    //             cardBody.push({
+    //                 type: 'Input.ChoiceSet',
+    //                 id: field.name,
+    //                 style: 'compact',
+    //                 value: field.value,
+    //                 choices: field.options.map(opt => ({
+    //                     title: opt.charAt(0).toUpperCase() + opt.slice(1),
+    //                     value: opt
+    //                 }))
+    //             });
+    //         } else if (field.type === 'category-dropdown') {
+    //             cardBody.push({
+    //                 type: 'Input.ChoiceSet',
+    //                 id: 'category',
+    //                 style: 'compact',
+    //                 value: field.value,
+    //                 choices: field.options.map(opt => ({
+    //                     title: opt,
+    //                     value: opt.toLowerCase()
+    //                 })),
+    //                 valueChangedAction: {
+    //                     type: 'Action.ResetInputs'
+    //                 }
+    //             });
+    //         } else if (field.type === 'subcategory-dropdown') {
+    //             cardBody.push({
+    //                 type: 'Input.ChoiceSet',
+    //                 id: 'subcategory',
+    //                 style: 'filtered',
+    //                 placeholder: 'Select subcategory',
+    //                 value: field.value,
+    //                 choices: [],
+    //                 'choices.data': {
+    //                     type: 'Data.Query',
+    //                     dataset: 'subcategories',
+    //                     associatedInputs: 'auto'
+    //                 }
+    //             });
+    //         }
+    //     }
+
+    //     return CardFactory.adaptiveCard({
+    //         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+    //         version: '1.5',
+    //         type: 'AdaptiveCard',
+    //         body: cardBody,
+    //         actions: [
+    //             {
+    //                 type: 'Action.Submit',
+    //                 title: 'Update',
+    //                 data: {
+    //                     action: 'submitUpdatedTicket',
+    //                     ticketId: ticketId
+    //                 }
+    //             },
+    //             {
+    //                 type: 'Action.Submit',
+    //                 title: 'Cancel',
+    //                 data: {
+    //                     action: 'cancel'
+    //                 }
+    //             }
+    //         ]
+    //     });
+    // }
 
 }
 

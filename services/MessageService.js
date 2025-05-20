@@ -7,6 +7,7 @@ const CardService = require('./CardService');
 
 class MessageService {
     async sendToUser(conversationId, message, teamsUserId = null) {
+        console.log("TeamsUserId: "+ teamsUserId);
         const appId = process.env.MicrosoftAppId;
         const appPassword = process.env.MicrosoftAppPassword;
         const tenantId = process.env.MicrosoftAppTenantId;
@@ -284,7 +285,7 @@ class MessageService {
         const userName = "Praveenkumar Rajendran"
         const profileBase64 = await this.getUserProfilePhotoBase64(email, process.env.AccessToken)
         console.log("After fetching profile")
-        const activity = await CardService.createUserProfileCard(userName, replyMessage,profileBase64);
+        const activity = await CardService.createUserProfileCard(userName, replyMessage, profileBase64);
 
         if (parentMessageId) {
             try {
@@ -297,35 +298,40 @@ class MessageService {
         }
     }
 
-        // TODO: Move this to userService
-        async getUserProfilePhotoBase64(email, accessToken) {
+    // TODO: Move this to userService
+    async getUserProfilePhotoBase64(email, accessToken) {
+        try {
+            const response = await axios.get(`https://graph.microsoft.com/v1.0/users/${email}/photo/$value`, {
+                responseType: 'arraybuffer',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            const contentType = response.headers['content-type'];
+            const base64Image = Buffer.from(response.data, 'binary').toString('base64');
+            return `data:${contentType};base64,${base64Image}`;
+        } catch (error) {
+            console.error(`⚠️ Failed to fetch profile photo for ${email}:`, error.response?.status, error.message);
+            // Fallback to a default avatar if needed
+            return 'https://adaptivecards.io/content/PersonPlaceholder.png';
+        }
+    }
+
+    async sendApprovalCard(ticketId, message, approverEmails) {
+        const activity = await CardService.buildInitiateApprovalCard(ticketId, message);
+        const userRecords = await Promise.all(
+            approverEmails.map(email => UserRepository.findByEmail(email))
+        );
+        for (const record of userRecords) {
             try {
-                const response = await axios.get(`https://graph.microsoft.com/v1.0/users/${email}/photo/$value`, {
-                    responseType: 'arraybuffer',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-                const contentType = response.headers['content-type'];
-                const base64Image = Buffer.from(response.data, 'binary').toString('base64');
-                return `data:${contentType};base64,${base64Image}`;
+                console.log(JSON.stringify(record));
+                const response = await this.sendToUser(null, activity, record.userId);
+                console.log(`Approval card sent successfully with conversation ID: ${response.id}`);
             } catch (error) {
-                console.error(`⚠️ Failed to fetch profile photo for ${email}:`, error.response?.status, error.message);
-                // Fallback to a default avatar if needed
-                return 'https://adaptivecards.io/content/PersonPlaceholder.png';
+                console.error('Error sending approval card:', error.response?.data || error.message);
             }
         }
-
-    async sendApprovalCard(ticketId, message, email) {
-        const teamsUserId = await UserRepository.findByEmail(email).userId;
-        const activity = await CardService.buildInitiateApprovalCard(ticketId, message);
-        console.log("Teams User ID: ", teamsUserId);
-        try {
-            const response = await sendToUser(null, activity, teamsUserId);
-            console.log(`Approval card sent successfully with conversation ID: ${response.id}`);
-        } catch (error) {
-            console.error('Error sending approval card:', error.response?.data || error.message);
-        }
+        console.log("Approval cards sent successfully");
     }
 }
 

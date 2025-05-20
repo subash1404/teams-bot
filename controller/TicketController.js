@@ -11,9 +11,9 @@ const slackService = require("../services/slack/slackService");
 const slackPrivateChannelService = require("../services/slack/slackPrivateChannelService");
 
 async function handleIncomingMessage(req, res) {
-  console.log("Inside onMessage");
-  const myBot = new TicketBot();
-  await adapter.process(req, res, (context) => myBot.run(context));
+    const myBot = new TicketBot();
+    await adapter.process(req, res, (context) => myBot.run(context));
+    console.log("Inside onMessage here");
 }
 
 async function syncReply(req, res) {
