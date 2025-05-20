@@ -2,13 +2,16 @@ const ticketRepository = require("../../repository/TicketRepository");
 const userRepository = require("../../repository/UserRepository");
 const outgoingService = require("./outgoingService");
 const agentChannelService = require("./agentChannelService");
-const slackService = require("./slackService");
+const blockService = require("./blockService");
 const jsonParserService = require("./jsonParserService");
 const axios = require("axios");
+const attachmentHandlerService = require("./attachmentHandlerService");
 
 async function handlePrivateChannelMessage(userId, messageText, ticket) {
   try {
     const user = await userRepository.findByUserId(userId);
+    console.log("UserId ", userId)
+    console.log("User email", user.email)
     const payload = {
       email: user.email,
       message: messageText,
@@ -26,7 +29,8 @@ async function handleTechnicianChannelMessage(
   userId,
   ticket,
   imChannel,
-  messageText
+  messageText,
+  files
 ) {
   console.log("Ticket found via im channel");
   const user = await userRepository.findByUserId(userId);
@@ -35,13 +39,18 @@ async function handleTechnicianChannelMessage(
     message: messageText,
   };
   await axios.post(`http://localhost:8081/ticket/${ticket.id}/reply`, payload);
-  await outgoingService.postMessage(
+  const response = await outgoingService.postMessage(
     imChannel.publicChannelId,
     userId,
     messageText,
     ticket.requestChannelConversationId,
     process.env.BOT_ACCESS_TOKEN
   );
+
+  if(files) {
+    const threadTs = await jsonParserService.extractThreadTs(response);
+    await attachmentHandlerService.handleAttachments(files, threadTs, imChannel.publicChannelId);
+  }
 }
 
 async function handleRequesterChannelMessage(
@@ -49,7 +58,8 @@ async function handleRequesterChannelMessage(
   channelId,
   messageText,
   threadTs,
-  teamId
+  teamId,
+  files
 ) {
   console.log(
     `Message received - userId: ${userId}, channelId: ${channelId}, teamId: ${teamId}, message: ${messageText}`
@@ -76,7 +86,9 @@ async function handleRequesterChannelMessage(
     await agentChannelService.sendMessageToAgentChannel(
       ticket,
       userId,
-      messageText
+      messageText,
+      null,
+      files
     );
   } else {
     console.log(
@@ -85,7 +97,13 @@ async function handleRequesterChannelMessage(
   }
 }
 
-async function handleNewMessage(userId, channelId, messageText, eventTs) {
+async function handleNewMessage(
+  userId,
+  channelId,
+  messageText,
+  eventTs,
+  files
+) {
   const user = await userRepository.findByUserId(userId);
 
   const ticketRequest = {
@@ -104,8 +122,10 @@ async function handleNewMessage(userId, channelId, messageText, eventTs) {
     channelId: channelId,
     requestChannelConversationId: eventTs,
   });
-  const requesterChannelBlocks =
-    await slackService.getRequesterChannelTicketCardBlock(ticket, ticketInfo);
+  const requesterChannelBlocks = await blockService.getPublicChannelBlock(
+    ticketInfo,
+    null
+  );
   const response = await outgoingService.postBlockMessage(
     channelId,
     requesterChannelBlocks,
@@ -113,7 +133,10 @@ async function handleNewMessage(userId, channelId, messageText, eventTs) {
     process.env.BOT_ACCESS_TOKEN
   );
   const requesterChannelBlockConversationId =
-    await jsonParserService.extractThreadTs(response.data);
+    await jsonParserService.extractThreadTs(response);
+  if (files) {
+    await attachmentHandlerService.handleAttachments(files, requesterChannelBlockConversationId, channelId);
+  }
   ticket.requesterChannelBlockConversationId =
     requesterChannelBlockConversationId;
   ticketRepository.saveTicket(ticket);
@@ -121,7 +144,8 @@ async function handleNewMessage(userId, channelId, messageText, eventTs) {
     ticket,
     userId,
     messageText,
-    ticketInfo
+    ticketInfo,
+    files
   );
 }
 

@@ -17,59 +17,64 @@ async function handleInteraction(payload) {
       }
 
       const action = actions[0];
+      const value = JSON.parse(action.value);
       switch (action.action_id) {
-        case "add_members":
+        case "private_group":
           await slackPrivateChannelService
-            .createPrivateChannel(action.value)
+            .createPrivateChannel(value.ticketId, payload.user.id)
             .catch((err) => console.error("Failed to create channel", err));
           break;
 
         case "update_ticket":
           await slackService.openUpdateTicketCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "initiate_approval":
           await slackService.openInitiateApprovalRequestCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "take_action_expand":
           await slackService.openTakeActionCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "assign_ticket_expand":
           await slackService.openAssignTicketCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
         case "add_note":
-          await slackService.openAddNoteCard(payload.trigger_id, action.value);
+          await slackService.openAddNoteCard(
+            payload.trigger_id,
+            value.ticketId
+          );
           break;
 
         case "assign_to_me":
           const user = await userRepository.findByUserId(payload.user.id);
           await ticketService.updateTicket(
-            action.value,
+            value.ticketId,
             user.email,
             null,
-            null
+            null,
+            payload.trigger_id
           );
           break;
 
         case "assign_to_others":
           await slackService.openTechnicianCard(
             payload.trigger_id,
-            action.value
+            value.ticketId
           );
           break;
 
@@ -109,12 +114,17 @@ async function handleInteraction(payload) {
           break;
 
         case "submit_note":
-          const noteText =
-            payload.view.state.values.note_input_block.note_input.value;
-          console.log("Note for Ticket", ticketId, "=>", noteText);
-          await axios.post(`http://localhost:8081/ticket/${ticketId}/notes`, {
-            note: noteText,
-          });
+          try {
+            const noteText =
+              payload.view.state.values.note_input_block.note_input.value;
+            console.log("Note for Ticket", ticketId, "=>", noteText);
+
+            await axios.post(`http://localhost:8081/ticket/${ticketId}/notes`, {
+              note: noteText,
+            });
+          } catch (error) {
+            console.error("Error saving note:", error);
+          }
           break;
 
         case "more_info_submit":
@@ -124,8 +134,12 @@ async function handleInteraction(payload) {
           break;
       }
     }
+    return;
   } catch (err) {
     console.error("Error handling Slack interaction:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Internal Server Error");
+    }
   }
 }
 

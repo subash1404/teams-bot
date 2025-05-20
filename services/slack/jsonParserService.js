@@ -30,6 +30,11 @@ async function getTicketId(payload) {
   return ticketMetadata.ticketId;
 }
 
+async function getChannelId(payload) {
+  const ticketMetadata = JSON.parse(payload.view.private_metadata);
+  return ticketMetadata.channelId;
+}
+
 async function getTechnicianEmail(payload) {
   return payload.view.state.values.technician_block.technician_select
     .selected_option.value;
@@ -87,5 +92,6 @@ module.exports = {
   getTechnicianEmail,
   formatCreatedDate,
   getUpdateTicketFields,
-  parseInitiateApprovalPayload
+  parseInitiateApprovalPayload,
+  getChannelId
 };

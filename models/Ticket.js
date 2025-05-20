@@ -42,6 +42,10 @@ const Ticket = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    privateChannelBlockConversationId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    }
   },
   {
     tableName: "TicketToIM",

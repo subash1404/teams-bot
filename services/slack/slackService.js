@@ -139,57 +139,15 @@ async function openAssignTicketCard(triggerId, ticketId) {
 }
 
 async function openAddNoteCard(triggerId, ticketId) {
-  console.log(
-    "🟢 Opening Add Note Modal for ticket:",
-    ticketId,
-    "with trigger_id:",
-    triggerId
-  );
-
-  const notePayload = {
-    trigger_id: triggerId,
-    view: {
-      type: "modal",
-      callback_id: "submit_note",
-      title: {
-        type: "plain_text",
-        text: "Add Note",
-      },
-      submit: {
-        type: "plain_text",
-        text: "Submit",
-      },
-      close: {
-        type: "plain_text",
-        text: "Cancel",
-      },
-      private_metadata: ticketId,
-      blocks: [
-        {
-          type: "input",
-          block_id: "note_input_block",
-          element: {
-            type: "plain_text_input",
-            multiline: true,
-            action_id: "note_input",
-            placeholder: {
-              type: "plain_text",
-              text: "Enter your note here...",
-            },
-          },
-          label: {
-            type: "plain_text",
-            text: "Note",
-          },
-        },
-      ],
-    },
-  };
+  const noteBlock = await blockService.getAddNoteBlock(ticketId);
 
   try {
     const response = await axios.post(
       "https://slack.com/api/views.push",
-      notePayload,
+      {
+        trigger_id: triggerId,
+        view: noteBlock,
+      },
       {
         headers: {
           Authorization: `Bearer ${process.env.BOT_ACCESS_TOKEN}`,
@@ -197,11 +155,10 @@ async function openAddNoteCard(triggerId, ticketId) {
         },
       }
     );
-
     console.log("Slack modal response:", response.data);
   } catch (err) {
     console.error(
-      "❌ Error opening Add Note modal:",
+      "Error opening Add Note modal:",
       err.response?.data || err.message
     );
   }
@@ -213,7 +170,6 @@ async function updateChannelCards(ticket, ticketInfo) {
   if (ticketInfo.data.technician) {
     technician = await userRepository.findByEmail(ticketInfo.data.technician);
   }
-
   const technicianChannelTicketCardBlocks =
     await blockService.getTicketChannelBlock(
       ticket,
@@ -222,7 +178,10 @@ async function updateChannelCards(ticket, ticketInfo) {
       technician?.name ?? "Unassigned"
     );
   const requesterChannelTicketCardBlocks =
-    await getRequesterChannelTicketCardBlock(ticket, ticketInfo);
+    await blockService.getTicketInfoBlock(
+      ticketInfo,
+      technician?.name ?? "Unassigned"
+    );
   const imChannelPublicToPrivate =
     await imChannelPublicToPrivateRepository.findByPublicChannelId(
       ticket.channelId
@@ -239,10 +198,23 @@ async function updateChannelCards(ticket, ticketInfo) {
     requesterChannelTicketCardBlocks,
     process.env.BOT_ACCESS_TOKEN
   );
+  if (ticket.privateChannelId) {
+    const privateChannelCardBlocks = await blockService.getTicketInfoBlock(
+      ticketInfo,
+      technician?.name ?? "Unassigned"
+    );
+    await outgoingService.updateBlocksMessage(
+      ticket.privateChannelId,
+      ticket.privateChannelBlockConversationId,
+      privateChannelCardBlocks,
+      process.env.BOT_ACCESS_TOKEN
+    );
+  }
 }
 
 async function handleApproverAction(payload) {
-  const ticketId = payload.actions[0].value;
+  const value = JSON.parse(payload.actions[0].value);
+  const ticketId = value.ticketId;
   const userId = payload.user.id;
   const actionId = payload.actions[0].action_id;
 
@@ -373,50 +345,6 @@ async function handleApproverAction(payload) {
   }
 }
 
-async function getRequesterChannelTicketCardBlock(ticket, ticketInfo) {
-  const createdAt = await formatCreatedDate(ticketInfo.data.createdAt);
-  let technicianName = "Unassigned";
-  if (ticketInfo.data.technician) {
-    const user = await userRepository.findByEmail(ticketInfo.data.technician);
-    technicianName = user.name;
-  }
-
-  const requesterChannelBlocks = [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*New Ticket created with ID:* ${ticketInfo.data.id}\n${ticketInfo.data.subject}`,
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*Status:* ${ticketInfo.data.status}\n*Assigned To:* ${
-          technicianName ?? "Unassigned"
-        }\n*Created Date:* ${createdAt}`,
-      },
-    },
-    {
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          text: {
-            type: "plain_text",
-            text: "Update properties",
-          },
-          action_id: "update_ticket",
-          value: ticket.id.toString(),
-        },
-      ],
-    },
-  ];
-
-  return requesterChannelBlocks;
-}
-
 async function sendApproverNotification(ticketId, approvers, note) {
   const ticketInfo = await axios.get(
     `http://localhost:8081/tickets/${ticketId}`
@@ -455,24 +383,10 @@ async function sendApproverNotification(ticketId, approvers, note) {
   }
 }
 
-async function formatCreatedDate(rawDateStr) {
-  const date = new Date(rawDateStr);
-  const options = {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  };
-  return new Intl.DateTimeFormat("en-GB", options).format(date);
-}
-
 module.exports = {
   replyMessage,
   updateChannelCards,
   openAddNoteCard,
-  getRequesterChannelTicketCardBlock,
   openTakeActionCard,
   openAssignTicketCard,
   openTechnicianCard,
