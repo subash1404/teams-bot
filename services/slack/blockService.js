@@ -158,7 +158,6 @@ async function getTicketChannelBlock(
   ticketInfo,
   requesterName,
   technicianName,
-  channelId
 ) {
   const createdAt = await jsonParserService.formatCreatedDate(
     ticketInfo.data.createdAt
@@ -187,7 +186,7 @@ async function getTicketChannelBlock(
             type: "plain_text",
             text: "Private Group",
           },
-          action_id: "add_members",
+          action_id: "private_group",
           value: JSON.stringify({ ticketId: ticket.id }),
         },
         {

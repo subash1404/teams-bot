@@ -11,7 +11,7 @@ const processPayload = async (payload, res) => {
     const eventNode = payload.event;
 
     if (eventNode && eventNode.type === "message") {
-      if (eventNode.bot_id) {
+      if (eventNode.bot_id || eventNode.subtype === "bot_message" || !eventNode.user) {
         return;
       }
 

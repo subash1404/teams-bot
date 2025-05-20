@@ -19,9 +19,9 @@ async function handleInteraction(payload) {
       const action = actions[0];
       const value = JSON.parse(action.value);
       switch (action.action_id) {
-        case "add_members":
+        case "private_group":
           await slackPrivateChannelService
-            .createPrivateChannel(value.ticketId)
+            .createPrivateChannel(value.ticketId, payload.user.id)
             .catch((err) => console.error("Failed to create channel", err));
           break;
 

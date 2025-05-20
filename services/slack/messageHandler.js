@@ -10,6 +10,8 @@ const attachmentHandlerService = require("./attachmentHandlerService");
 async function handlePrivateChannelMessage(userId, messageText, ticket) {
   try {
     const user = await userRepository.findByUserId(userId);
+    console.log("UserId ", userId)
+    console.log("User email", user.email)
     const payload = {
       email: user.email,
       message: messageText,

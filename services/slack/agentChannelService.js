@@ -60,7 +60,7 @@ async function getOrCreateTicketThreadInChannel(ticket, channelId, ticketInfo) {
     process.env.BOT_ACCESS_TOKEN
   );
   console.log("Response ", response.data)
-  const threadTs = await jsonParserService.extractThreadTs(response.data);
+  const threadTs = await jsonParserService.extractThreadTs(response);
 
   if (threadTs) {
     ticket.techChannelConversationId = threadTs;
