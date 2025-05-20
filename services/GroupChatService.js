@@ -3,22 +3,18 @@ const UserRepository = require("../repository/UserRepository");
 const TicketRepository = require("../repository/TicketRepository");
 
 class GroupChatService {
-    async initiateGroupChat(requesterEmail, technicianEmail, ticketId) {
+    async initiateGroupChat(emails, ticketId) {
 
-        const requester = await UserRepository.findByEmail(requesterEmail);
-        const technician = await UserRepository.findByEmail(technicianEmail);
-        const members = [
+        const userRecords = await Promise.all(
+            emails.map(email => UserRepository.findByEmail(email))
+        );
+        const members = userRecords.map( user => (
             {
                 "@odata.type": "#microsoft.graph.aadUserConversationMember",
                 "roles": ["owner"],
-                "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${requester.teamsObjectId}`
-            },
-            {
-                "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                "roles": ["owner"],
-                "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${technician.teamsObjectId}`
-            }
-        ];
+                "user@odata.bind": `https://graph.microsoft.com/v1.0/users/${user.teamsObjectId}`
+            }));       
+            console.log(JSON.stringify(members));     
 
         const chatResponse = await axios.post(
             "https://graph.microsoft.com/v1.0/chats",

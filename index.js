@@ -12,10 +12,10 @@ const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 const ticketRoutes = require('./route/TicketRoutes');
 
-const { sequelize } = require('./config/db');
-sequelize.sync({ alter: true })
-  .then(() => console.log('✅ Ticket table synced'))
-  .catch(console.error);
+// const { sequelize } = require('./config/db');
+// sequelize.sync({ alter: true })
+//   .then(() => console.log('✅ Ticket table synced'))
+//   .catch(console.error);
 
 server.listen(process.env.port || process.env.PORT || 3978, () => {
     console.log(`\n${ server.name } listening to ${ server.url }`);

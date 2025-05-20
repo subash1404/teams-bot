@@ -1,9 +1,10 @@
 const axios = require("axios");
+const { CardFactory } = require("botbuilder");
 class CardService {
     async buildTechnicianTicketCard(ticketId, attachments) {
         console.log("Ticket ID inside createTicketCard: ", ticketId);
         const ticket = (await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)).data;
-        console.log("Ticket inside card updation: "+ JSON.stringify(ticket));
+        console.log("Ticket inside card updation: " + JSON.stringify(ticket));
         // Create the base message with the adaptive card
         const message = {
             type: "message",
@@ -64,7 +65,6 @@ class CardService {
                                     },
                                     action: "techAssign",
                                     ticketId: ticketId,
-                                    data: 'techAssign'
                                 }
                             },
                             {
@@ -76,7 +76,17 @@ class CardService {
                                     },
                                     action: "addNote",
                                     ticketId: ticketId,
-                                    data: 'addNote'
+                                }
+                            },
+                            {
+                                type: "Action.Submit",
+                                title: "✏️ Initiate Approval",
+                                data: {
+                                    msteams: {
+                                        type: "task/fetch"
+                                    },
+                                    action: "initiateApproval",
+                                    ticketId: ticketId,
                                 }
                             }
                         ]
@@ -89,87 +99,87 @@ class CardService {
     }
 
     async createUserProfileCard(userName, messageText, profileBase64) {
-            const timestamp = new Date().toLocaleString();
-            return {
-                type: "message",
-                attachments: [
-                    {
-                        contentType: "application/vnd.microsoft.card.adaptive",
-                        content: {
-                            type: "AdaptiveCard",
-                            version: "1.5",
-                            body: [
-                                {
-                                    type: "ColumnSet",
-                                    columns: [
-                                        {
-                                            type: "Column",
-                                            width: "auto",
-                                            items: [
-                                                {
-                                                    type: "Image",
-                                                    url: profileBase64,
-                                                    size: "Medium",
-                                                    style: "Person",
-                                                    height: "48px"
-                                                }
-                                            ],
-                                            spacing: "Medium"
-                                        },
-                                        {
-                                            type: "Column",
-                                            width: "stretch",
-                                            items: [
-                                                {
-                                                    type: "ColumnSet",
-                                                    columns: [
-                                                        {
-                                                            type: "Column",
-                                                            width: "stretch",
-                                                            items: [
-                                                                {
-                                                                    type: "RichTextBlock",
-                                                                    inlines: [
-                                                                        {
-                                                                            type: "TextRun",
-                                                                            text: userName,
-                                                                            weight: "Bolder"
-                                                                        },
-                                                                        {
-                                                                            type: "TextRun",
-                                                                            text: " • " + timestamp,
-                                                                            isSubtle: true,
-                                                                            size: "Small"
-                                                                        }
-                                                                    ]
-                                                                }
-                                                            ],
-                                                            spacing: "None"
-                                                        }
-                                                    ],
-                                                    spacing: "None"
-                                                },
-                                                {
-                                                    type: "TextBlock",
-                                                    text: messageText,
-                                                    wrap: true,
-                                                    spacing: "Small"
-                                                }
-                                            ],
-                                            spacing: "Medium"
-                                        }
-                                    ],
-                                    spacing: "None"
-                                }
-                            ],
-                            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-                            style: "default",
-                            minHeight: "0px",
-                            bleed: true
-                        }
-                    }]
-            }
+        const timestamp = new Date().toLocaleString();
+        return {
+            type: "message",
+            attachments: [
+                {
+                    contentType: "application/vnd.microsoft.card.adaptive",
+                    content: {
+                        type: "AdaptiveCard",
+                        version: "1.5",
+                        body: [
+                            {
+                                type: "ColumnSet",
+                                columns: [
+                                    {
+                                        type: "Column",
+                                        width: "auto",
+                                        items: [
+                                            {
+                                                type: "Image",
+                                                url: profileBase64,
+                                                size: "Medium",
+                                                style: "Person",
+                                                height: "48px"
+                                            }
+                                        ],
+                                        spacing: "Medium"
+                                    },
+                                    {
+                                        type: "Column",
+                                        width: "stretch",
+                                        items: [
+                                            {
+                                                type: "ColumnSet",
+                                                columns: [
+                                                    {
+                                                        type: "Column",
+                                                        width: "stretch",
+                                                        items: [
+                                                            {
+                                                                type: "RichTextBlock",
+                                                                inlines: [
+                                                                    {
+                                                                        type: "TextRun",
+                                                                        text: userName,
+                                                                        weight: "Bolder"
+                                                                    },
+                                                                    {
+                                                                        type: "TextRun",
+                                                                        text: " • " + timestamp,
+                                                                        isSubtle: true,
+                                                                        size: "Small"
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ],
+                                                        spacing: "None"
+                                                    }
+                                                ],
+                                                spacing: "None"
+                                            },
+                                            {
+                                                type: "TextBlock",
+                                                text: messageText,
+                                                wrap: true,
+                                                spacing: "Small"
+                                            }
+                                        ],
+                                        spacing: "Medium"
+                                    }
+                                ],
+                                spacing: "None"
+                            }
+                        ],
+                        $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+                        style: "default",
+                        minHeight: "0px",
+                        bleed: true
+                    }
+                }]
         }
+    }
 
     async buildRequesterTicketCard(ticketId) {
         const ticket = (await axios.get(`${process.env.BackEndBaseUrl}/tickets/${ticketId}`)).data;
@@ -391,6 +401,17 @@ class CardService {
         } else {
             actions.push(
                 {
+                    type: 'Action.Submit',
+                    title: 'More info',
+                    data: {
+                        msteams: {
+                            type: 'task/fetch'
+                        },
+                        action: 'moreinfo',
+                        ticketId
+                    }
+                },
+                {
                     type: 'Action.Execute',
                     title: 'Approve',
                     verb: 'approveTicket',
@@ -422,7 +443,7 @@ class CardService {
         };
     }
 
-    async buildTechnicianAssignmentCard(ticketId) {
+    async buildOtherTechnicianAssignmentCard(ticketId) {
         console.log("TicketId: " + ticketId)
         try {
             const technicians = await axios.get(`${process.env.BackEndBaseUrl}/technicians?source=TEAMS`)
@@ -462,6 +483,9 @@ class CardService {
                         "type": "Action.Submit",
                         "title": "Assign Technician",
                         "data": {
+                            "msteams": {
+                                "type": "task/submit"
+                            },
                             "action": "assignTechnician",
                             "ticketId": ticketId
                         }
@@ -476,6 +500,173 @@ class CardService {
             throw err;
         }
     }
+
+    async buildTechnicianAssignmentCard(ticketId) {
+        return {
+            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+            type: "AdaptiveCard",
+            version: "1.5",
+            body: [
+                {
+                    type: "TextBlock",
+                    text: "Assign Technician",
+                    weight: "Bolder",
+                    size: "Medium"
+                },
+                {
+                    type: "TextBlock",
+                    text: "Choose how you want to assign the ticket:",
+                    wrap: true
+                }
+            ],
+            actions: [
+                {
+                    type: "Action.Submit",
+                    title: "Assign to Me",
+                    data: {
+                        action: "assignToMe",
+                        ticketId: ticketId
+                    }
+                },
+                {
+                    type: "Action.Submit",
+                    title: "Assign to Other",
+                    data: {
+                        action: "openTechList",
+                        ticketId: ticketId
+                    }
+                }
+            ]
+        };
+    }
+
+    async buildMoreInfoCard(ticketId) {
+        return CardFactory.adaptiveCard({
+            type: "AdaptiveCard",
+            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+            version: "1.5",
+            body: [
+                {
+                    type: "Input.Text",
+                    placeholder: "Enter your message..",
+                    isMultiline: true,
+                    id: "messageText",
+                }
+            ],
+            actions: [
+                {
+                    type: "Action.Submit",
+                    title: "Submit",
+                    data: {
+                        action: "submitMoreInfo",
+                        ticketId
+                    }
+                },
+                {
+                    type: "Action.Submit",
+                    title: "Close",
+                    data: {
+                        msteams: {
+                            type: "task/submit"
+                        },
+                        action: "cancel"
+                    }
+                }
+            ]
+        });
+    }
+
+    async buildSendApprovalCard(ticketId) {
+        const users = [
+            { displayName: "Praveen Rajendran", id: "praveen@superopsinc1.onmicrosoft.com" },
+            { displayName: "Shyam", id: "shyam@superopsinc1.onmicrosoft.com" },
+            { displayName: "Prajwal", id: "prajwal@superopsinc1.onmicrosoft.com" },
+            { displayName: "Subash", id: "subash@superopsinc1.onmicrosoft.com" }
+        ];
+
+        const choices = users.map(user => ({
+            title: user.displayName,
+            value: user.id
+        }));
+        return CardFactory.adaptiveCard(
+            {
+                $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+                type: "AdaptiveCard",
+                version: "1.5",
+                body: [
+                    {
+                        type: "TextBlock",
+                        text: "Assign to Technician",
+                        weight: "Bolder",
+                        size: "Medium"
+                    },
+                    {
+                        type: "TextBlock",
+                        text: "Select a technician from the list below",
+                        spacing: "Small"
+                    },
+                    {
+                        type: "Input.ChoiceSet",
+                        id: "selectedManagers",
+                        isMultiSelect: true,
+                        choices: choices
+                    },
+                    // {
+                    //     "type": "Input.ChoiceSet",
+                    //     "choices": [
+                    //         {
+                    //             "title": "Custom Profile 1",
+                    //             "value": "Profile1"
+                    //         },
+                    //         {
+                    //             "title": "Custom Profile 2",
+                    //             "value": "Profile2"
+                    //         }
+                    //     ],
+                    //     // "choices.data": {
+                    //     //     "type": "Data.Query",
+                    //     //     "dataset": "graph.microsoft.com/users",
+                    //     // },
+                    //     "id": "people-picker",
+                    //     "isMultiSelect": true
+                    // },
+                    {
+                        type: "TextBlock",
+                        text: "Message",
+                        wrap: true,
+                        separator: true
+                    },
+                    {
+                        type: "Input.Text",
+                        id: "messageText",
+                        placeholder: "Add a message here",
+                        isMultiline: true
+                    }
+                ],
+                actions: [
+                    {
+                        type: "Action.Submit",
+                        title: "Send",
+                        data: {
+                            action: "sendApprovalCard",
+                            ticketId
+                        },
+                        style: "positive"
+                    },
+                    {
+                        type: "Action.Submit",
+                        title: "Cancel",
+                        data: {
+                            msteams: {
+                                type: "task/submit"
+                            }
+                        },
+                        style: "destructive"
+                    }
+                ]
+            }
+        )
+    };
 }
 
 module.exports = new CardService();
